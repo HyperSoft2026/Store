@@ -52,7 +52,6 @@
   }
 
   async function loadProducts({ append = false } = {}) {
-    if (state.loading) return;
     state.loading = true;
     const requestId = ++state.requestId;
     more.disabled = true;
@@ -260,7 +259,9 @@
         dialog.close();
         if (location.pathname.startsWith('/product/')) history.pushState({}, '', '/');
       });
-      dialog.querySelector('#download-product').addEventListener('click', async () => {
+      const downloadButton = dialog.querySelector('#download-product');
+      downloadButton.hidden = !item.hasDownload;
+      downloadButton.addEventListener('click', async () => {
         const button = dialog.querySelector('#download-product');
         const notice = dialog.querySelector('#download-notice');
         button.disabled = true;
