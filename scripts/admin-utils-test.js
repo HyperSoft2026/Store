@@ -1,0 +1,11 @@
+'use strict';
+const assert = require('node:assert/strict');
+const { slugify } = require('../public/admin-utils');
+assert.equal(slugify('TikTok App'), 'tiktok-app');
+assert.equal(slugify('Minecraft  لعبة'), 'minecraft-لعبة');
+assert.equal(slugify('  تيك توك الرسمي  '), 'تيك-توك-الرسمي');
+assert.equal(slugify('Crème Brûlée'), 'crème-brûlée');
+assert.equal(slugify('---Hello___World---'), 'hello-world');
+assert.equal(slugify(''), ''); assert.equal(slugify('😀'), '');
+assert.ok(slugify('ا'.repeat(200)).length <= 160);
+console.log('Admin utility tests passed: Arabic, English, Unicode normalization, punctuation and length.');
