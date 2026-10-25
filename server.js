@@ -350,7 +350,7 @@ app.get('/api/admin/posts', requireDatabase, requireAdmin, async (req, res, next
     const q = adminText(String(req.query.q || ''), 100);
     const values = [];
     let where = '';
-    if (q) { values.push('%' + q.replace(/[\\%_]/g, '\\app.use(express.static(path.join(__dirname, 'public'), {') + '%'); where = 'WHERE title ILIKE $1 OR slug ILIKE $1 OR category ILIKE $1'; }
+    if (q) { values.push('%' + q + '%'); where = 'WHERE title ILIKE $1 OR slug ILIKE $1 OR category ILIKE $1'; }
     const result = await pool.query('SELECT * FROM store_posts ' + where + ' ORDER BY updated_at DESC LIMIT 200', values);
     res.json({ items: result.rows.map(publicPost) });
   } catch (error) { next(error); }
