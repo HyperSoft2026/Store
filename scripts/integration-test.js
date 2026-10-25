@@ -1,6 +1,10 @@
 'use strict';
 const assert = require('node:assert/strict');
-const { spawn } = require('node:child_process');
+const { spawn, spawnSync } = require('node:child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { Pool } = require('pg');
 const net = require('node:net');
 function freePort() { return new Promise((resolve,reject)=>{const s=net.createServer();s.once('error',reject);s.listen(0,'127.0.0.1',()=>{const p=s.address().port;s.close(e=>e?reject(e):resolve(p));});}); }
 (async()=>{
@@ -26,6 +30,20 @@ function freePort() { return new Promise((resolve,reject)=>{const s=net.createSe
   r=await api('/api/admin/posts',{method:'POST',write:true,body:JSON.stringify({title:'Integration Published',slug:'integration-published',excerpt:'published',content:'body',coverImage:'',category:'CI',status:'published'})});assert.equal(r.response.status,201);const publishedId=r.data.item.id;
   r=await api('/api/posts/integration-published');assert.equal(r.response.status,200,'published post public');
   const noCsrf=await fetch(base+'/api/admin/posts',{method:'POST',headers:{Cookie:cookie,'Content-Type':'application/json'},body:JSON.stringify({title:'Rejected',slug:'csrf-rejected',status:'draft'})});assert.equal(noCsrf.status,403,'missing CSRF token rejected');
+  if (process.env.STORE_RESTORE_DATABASE_URL) {
+    const backupPath = path.join(os.tmpdir(), 'store-integration-' + process.pid + '.dump');
+    const backup = spawnSync(process.execPath, ['scripts/backup-db.js'], { env: { ...process.env, TEST_DATABASE_URL: dbUrl, STORE_BACKUP_PATH: backupPath }, stdio: 'inherit' });
+    assert.equal(backup.status, 0, 'database backup command should succeed');
+    const restore = spawnSync(process.execPath, ['scripts/restore-db.js', backupPath], { env: { ...process.env, TEST_DATABASE_URL: dbUrl, STORE_RESTORE_DATABASE_URL: process.env.STORE_RESTORE_DATABASE_URL, RESTORE_CONFIRM: 'RESTORE_TO_TEST_DATABASE' }, stdio: 'inherit' });
+    assert.equal(restore.status, 0, 'restore command should succeed against separate target');
+    const restored = new Pool({ connectionString: process.env.STORE_RESTORE_DATABASE_URL, ssl: false });
+    try {
+      const products = await restored.query("SELECT slug FROM store_products WHERE slug='integration-product'");
+      const posts = await restored.query("SELECT slug FROM store_posts WHERE slug='integration-published'");
+      assert.equal(products.rowCount, 1, 'restored backup should contain the created product');
+      assert.equal(posts.rowCount, 1, 'restored backup should contain the published post');
+    } finally { await restored.end(); fs.rmSync(backupPath, { force: true }); }
+  }
   for(const [path,id] of [['posts',draftId],['posts',publishedId],['products',productId],['categories',categoryId]]){const d=await api('/api/admin/'+path+'/'+encodeURIComponent(id),{method:'DELETE',write:true});assert.equal(d.response.status,200,'cleanup '+path);}
   await api('/api/admin/logout',{method:'POST',write:true,body:'{}'});
   console.log('PostgreSQL integration tests passed: schema, auth, CSRF, category/product/post CRUD, draft privacy and download guard.');
