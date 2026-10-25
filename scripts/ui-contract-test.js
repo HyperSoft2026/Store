@@ -15,6 +15,8 @@ assert.ok(storefront.includes('/styles.css?v=0.0.2'), 'storefront CSS cache key 
 assert.ok(storefront.includes('/app.js?v=0.0.2'), 'storefront JS cache key should match release');
 assert.ok(app.includes('/posts.css?v=0.0.2'), 'posts CSS cache key should match release');
 assert.match(app, /downloadButton.hidden = !item.hasDownload/, 'unavailable download button should be hidden');
+assert.match(app, /const requestId = \+\+state\.requestId/, 'each product load should have a unique request id');
+assert.match(app, /if \(requestId !== state\.requestId\) return/, 'stale product responses should be ignored');
 assert.ok(server.includes('hasDownload: Boolean(row.download_url)'), 'public API should expose availability flag, not URL');
 assert.ok(!server.includes('downloadUrl: row.download_url'), 'public API must not expose the raw download URL');
 assert.match(server, /store_admin_sessions/, 'admin sessions should be database-backed');
