@@ -3,7 +3,7 @@
 
   const $ = (selector) => document.querySelector(selector);
   const postsStyle = document.createElement('link');
-  postsStyle.rel = 'stylesheet'; postsStyle.href = '/posts.css?v=1'; document.head.appendChild(postsStyle);
+  postsStyle.rel = 'stylesheet'; postsStyle.href = '/posts.css?v=0.0.2'; document.head.appendChild(postsStyle);
   const state = { query: '', category: '', offset: 0, limit: 24, total: 0, loading: false, requestId: 0 };
   const grid = $('#product-grid');
   const status = $('#status-message');
