@@ -21,6 +21,7 @@ function freePort() { return new Promise((resolve,reject)=>{const s=net.createSe
   while(Date.now()<deadline){if(child.exitCode!==null)throw Error('Server exited early: '+logs);try{const r=await fetch(base+'/api/health');const d=await r.json();if(r.status===200&&d.database==='connected'){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,150));}
   assert.ok(ready,'PostgreSQL should connect and schema initialize: '+logs);
   let r=await api('/api/admin/products');assert.equal(r.response.status,401,'admin API rejects unauthenticated requests');
+  const malformedCookie=await fetch(base+'/api/admin/products',{headers:{Cookie:'store_admin_session=%ZZ'}});assert.equal(malformedCookie.status,401,'malformed session cookie should be treated as unauthenticated');
   r=await api('/api/admin/login',{method:'POST',body:JSON.stringify({username:'store-integration-user',password:'integration-test-password-only'})});assert.equal(r.response.status,200,'admin login succeeds');csrf=r.data.csrfToken;assert.ok(cookie&&csrf); const sessionCookie=cookie;
   const secondPort=await freePort(); secondChild=spawn(process.execPath,['server.js'],{env:{...process.env,PORT:String(secondPort),NODE_ENV:'test',POSTGRESQL_ADDON_URI:dbUrl,ADMIN_USERNAME:'store-integration-user',ADMIN_PASSWORD:'integration-test-password-only',ADMIN_LINK:'/integration-test-admin-route',PGSSLMODE:'disable'},stdio:['ignore','pipe','pipe']});
   secondChild.stdout.on('data',c=>secondLogs+=c.toString()); secondChild.stderr.on('data',c=>secondLogs+=c.toString());
@@ -50,6 +51,9 @@ function freePort() { return new Promise((resolve,reject)=>{const s=net.createSe
     const backupPath = path.join(os.tmpdir(), 'store-integration-' + process.pid + '.dump');
     const backup = spawnSync(process.execPath, ['scripts/backup-db.js'], { env: { ...process.env, TEST_DATABASE_URL: dbUrl, STORE_BACKUP_PATH: backupPath }, stdio: 'inherit' });
     assert.equal(backup.status, 0, 'database backup command should succeed');
+    assert.equal(fs.statSync(backupPath).mode & 0o777, 0o600, 'backup file should be owner-only');
+    const unsafeRestore = spawnSync(process.execPath, ['scripts/restore-db.js', backupPath], { env: { ...process.env, TEST_DATABASE_URL: dbUrl, STORE_RESTORE_DATABASE_URL: dbUrl, RESTORE_CONFIRM: 'RESTORE_TO_DATABASE:store_test' }, stdio: 'ignore' });
+    assert.equal(unsafeRestore.status, 2, 'restore must refuse to target its own source database');
     const restore = spawnSync(process.execPath, ['scripts/restore-db.js', backupPath], { env: { ...process.env, TEST_DATABASE_URL: dbUrl, STORE_RESTORE_DATABASE_URL: process.env.STORE_RESTORE_DATABASE_URL, RESTORE_CONFIRM: 'RESTORE_TO_DATABASE:store_restore' }, stdio: 'inherit' });
     assert.equal(restore.status, 0, 'restore command should succeed against separate target');
     const restored = new Pool({ connectionString: process.env.STORE_RESTORE_DATABASE_URL, ssl: false });
