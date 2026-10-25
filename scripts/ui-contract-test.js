@@ -15,7 +15,8 @@ assert.ok(storefront.includes('/styles.css?v=0.0.2'), 'storefront CSS cache key 
 assert.ok(storefront.includes('/app.js?v=0.0.2'), 'storefront JS cache key should match release');
 assert.ok(app.includes('/posts.css?v=0.0.2'), 'posts CSS cache key should match release');
 assert.match(app, /downloadButton.hidden = !item.hasDownload/, 'unavailable download button should be hidden');
-assert.match(server, /hasDownload: Boolean(row.download_url)/, 'public API should expose availability flag, not URL');
+assert.ok(server.includes('hasDownload: Boolean(row.download_url)'), 'public API should expose availability flag, not URL');
+assert.ok(!server.includes('downloadUrl: row.download_url'), 'public API must not expose the raw download URL');
 assert.match(server, /store_admin_sessions/, 'admin sessions should be database-backed');
 assert.match(server, /store_admin_attempts/, 'login throttling should be database-backed');
 console.log('UI contract tests passed: admin forms, script order, cache keys and download availability.');
