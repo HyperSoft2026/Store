@@ -85,7 +85,7 @@ app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 const pool = DATABASE_URL
   ? new Pool({
       connectionString: DATABASE_URL,
-      ssl: process.env.PGSSLMODE === 'disable' ? false : (process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined),
+      ssl: process.env.PGSSLMODE === 'disable' ? false : (process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : undefined),
       connectionTimeoutMillis: 10000,
       idleTimeoutMillis: 30000,
       max: 10
@@ -284,11 +284,10 @@ app.get('/api/products/:slug', requireDatabase, async (req, res, next) => {
 app.post('/api/products/:slug/download', requireDatabase, async (req, res, next) => {
   try {
     const result = await pool.query(
-      'UPDATE store_products SET downloads = downloads + 1 WHERE slug = $1 AND is_published = TRUE RETURNING download_url',
+      "UPDATE store_products SET downloads = downloads + 1 WHERE slug = $1 AND is_published = TRUE AND download_url <> '' RETURNING download_url",
       [String(req.params.slug).slice(0, 160)]
     );
-    if (!result.rowCount) return res.status(404).json({ error: 'not_found', message: 'رابط التنزيل مو متوفر.' });
-    if (!result.rows[0].download_url) return res.status(404).json({ error: 'download_unavailable', message: 'التنزيل لهذا المنتج مو متوفر حالياً.' });
+    if (!result.rowCount) return res.status(404).json({ error: 'download_unavailable', message: 'التنزيل لهذا المنتج مو متوفر حالياً.' });
     res.json({ url: result.rows[0].download_url });
   } catch (error) { next(error); }
 });
@@ -345,6 +344,97 @@ app.post('/api/admin/logout', requireAdmin, requireAdminCsrf, (req, res) => {
   res.clearCookie(ADMIN_COOKIE, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/' });
   res.json({ ok: true });
 });
+
+function parseProduct(body) {
+  const name = adminText(body.name, 180);
+  const slug = adminSlug(body.slug || name);
+  const imageUrl = adminText(body.imageUrl, 1500);
+  const downloadUrl = adminText(body.downloadUrl, 2000);
+  const categoryId = body.categoryId === '' || body.categoryId == null ? null : Number(body.categoryId);
+  if (!name) return { error: 'اسم المنتج مطلوب.' };
+  if (!slug) return { error: 'رابط المنتج غير صالح.' };
+  if (imageUrl && !/^https?:\\/\\//i.test(imageUrl) && !imageUrl.startsWith('/')) return { error: 'رابط صورة المنتج غير صالح.' };
+  if (downloadUrl && !/^https?:\\/\\//i.test(downloadUrl)) return { error: 'رابط التنزيل يجب أن يبدأ بـ http:// أو https://.' };
+  if (categoryId !== null && (!Number.isSafeInteger(categoryId) || categoryId < 1)) return { error: 'القسم المحدد غير صالح.' };
+  return { product: { name, slug, categoryId, shortDescription: adminText(body.shortDescription, 500), description: adminText(body.description, 20000), imageUrl, downloadUrl, version: adminText(body.version, 80), fileSize: adminText(body.fileSize, 80), developer: adminText(body.developer, 180), featured: body.featured === true, published: body.published === true } };
+}
+function parseCategory(body) {
+  const name = adminText(body.name, 100);
+  const slug = adminSlug(body.slug || name);
+  if (!name || !slug) return { error: 'اسم القسم ورابطه مطلوبان.' };
+  return { category: { name, slug, description: adminText(body.description, 500) } };
+}
+app.get('/api/admin/categories', requireDatabase, requireAdmin, async (req, res, next) => {
+  try {
+    const result = await pool.query('SELECT c.id,c.name,c.slug,c.description,c.created_at,COUNT(p.id)::int AS product_count FROM store_categories c LEFT JOIN store_products p ON p.category_id=c.id GROUP BY c.id ORDER BY c.name');
+    res.json({ items: result.rows });
+  } catch (error) { next(error); }
+});
+app.post('/api/admin/categories', requireDatabase, requireAdmin, requireAdminCsrf, async (req, res, next) => {
+  const parsed = parseCategory(req.body || {});
+  if (parsed.error) return res.status(400).json({ message: parsed.error });
+  try {
+    const c = parsed.category;
+    const result = await pool.query('INSERT INTO store_categories(name,slug,description) VALUES($1,$2,$3) RETURNING *', [c.name,c.slug,c.description]);
+    res.status(201).json({ item: result.rows[0] });
+  } catch (error) { if (error.code === '23505') return res.status(409).json({ message: 'اسم القسم أو رابطه مستخدم مسبقاً.' }); next(error); }
+});
+app.put('/api/admin/categories/:id', requireDatabase, requireAdmin, requireAdminCsrf, async (req, res, next) => {
+  const parsed = parseCategory(req.body || {});
+  if (parsed.error) return res.status(400).json({ message: parsed.error });
+  try {
+    const c = parsed.category;
+    const result = await pool.query('UPDATE store_categories SET name=$1,slug=$2,description=$3 WHERE id=$4 RETURNING *', [c.name,c.slug,c.description,req.params.id]);
+    if (!result.rowCount) return res.status(404).json({ message: 'القسم غير موجود.' });
+    res.json({ item: result.rows[0] });
+  } catch (error) { if (error.code === '23505') return res.status(409).json({ message: 'اسم القسم أو رابطه مستخدم مسبقاً.' }); next(error); }
+});
+app.delete('/api/admin/categories/:id', requireDatabase, requireAdmin, requireAdminCsrf, async (req, res, next) => {
+  try {
+    const result = await pool.query('DELETE FROM store_categories WHERE id=$1 RETURNING id', [req.params.id]);
+    if (!result.rowCount) return res.status(404).json({ message: 'القسم غير موجود.' });
+    res.json({ ok: true });
+  } catch (error) { next(error); }
+});
+app.get('/api/admin/products', requireDatabase, requireAdmin, async (req, res, next) => {
+  try {
+    const q = adminText(String(req.query.q || ''), 100);
+    const values = [];
+    let where = '';
+    if (q) { values.push('%' + q.replace(/[\\%_]/g, '\\\\app.get('/api/admin/posts', requireDatabase, requireAdmin, async (req, res, next) => {') + '%'); where = 'WHERE p.name ILIKE $1 OR p.slug ILIKE $1 OR p.developer ILIKE $1'; }
+    const result = await pool.query('SELECT p.id,p.name,p.slug,p.category_id AS "categoryId",c.name AS "categoryName",p.short_description AS "shortDescription",p.description,p.image_url AS "imageUrl",p.download_url AS "downloadUrl",p.version,p.file_size AS "fileSize",p.developer,p.is_featured AS featured,p.is_published AS published,p.downloads,p.created_at AS "createdAt",p.updated_at AS "updatedAt" FROM store_products p LEFT JOIN store_categories c ON c.id=p.category_id ' + where + ' ORDER BY p.updated_at DESC NULLS LAST,p.created_at DESC LIMIT 500', values);
+    res.json({ items: result.rows });
+  } catch (error) { next(error); }
+});
+app.post('/api/admin/products', requireDatabase, requireAdmin, requireAdminCsrf, async (req, res, next) => {
+  const parsed = parseProduct(req.body || {});
+  if (parsed.error) return res.status(400).json({ message: parsed.error });
+  const p = parsed.product;
+  try {
+    if (p.categoryId !== null) { const c = await pool.query('SELECT id FROM store_categories WHERE id=$1', [p.categoryId]); if (!c.rowCount) return res.status(400).json({ message: 'القسم المحدد غير موجود.' }); }
+    const result = await pool.query('INSERT INTO store_products(name,slug,category_id,short_description,description,image_url,download_url,version,file_size,developer,is_featured,is_published) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id,name,slug', [p.name,p.slug,p.categoryId,p.shortDescription,p.description,p.imageUrl,p.downloadUrl,p.version,p.fileSize,p.developer,p.featured,p.published]);
+    res.status(201).json({ item: result.rows[0] });
+  } catch (error) { if (error.code === '23505') return res.status(409).json({ message: 'رابط المنتج مستخدم مسبقاً.' }); next(error); }
+});
+app.put('/api/admin/products/:id', requireDatabase, requireAdmin, requireAdminCsrf, async (req, res, next) => {
+  const parsed = parseProduct(req.body || {});
+  if (parsed.error) return res.status(400).json({ message: parsed.error });
+  const p = parsed.product;
+  try {
+    if (p.categoryId !== null) { const c = await pool.query('SELECT id FROM store_categories WHERE id=$1', [p.categoryId]); if (!c.rowCount) return res.status(400).json({ message: 'القسم المحدد غير موجود.' }); }
+    const result = await pool.query('UPDATE store_products SET name=$1,slug=$2,category_id=$3,short_description=$4,description=$5,image_url=$6,download_url=$7,version=$8,file_size=$9,developer=$10,is_featured=$11,is_published=$12,updated_at=NOW() WHERE id=$13 RETURNING id,name,slug', [p.name,p.slug,p.categoryId,p.shortDescription,p.description,p.imageUrl,p.downloadUrl,p.version,p.fileSize,p.developer,p.featured,p.published,req.params.id]);
+    if (!result.rowCount) return res.status(404).json({ message: 'المنتج غير موجود.' });
+    res.json({ item: result.rows[0] });
+  } catch (error) { if (error.code === '23505') return res.status(409).json({ message: 'رابط المنتج مستخدم مسبقاً.' }); next(error); }
+});
+app.delete('/api/admin/products/:id', requireDatabase, requireAdmin, requireAdminCsrf, async (req, res, next) => {
+  try {
+    const result = await pool.query('DELETE FROM store_products WHERE id=$1 RETURNING id', [req.params.id]);
+    if (!result.rowCount) return res.status(404).json({ message: 'المنتج غير موجود.' });
+    res.json({ ok: true });
+  } catch (error) { next(error); }
+});
+
 app.get('/api/admin/posts', requireDatabase, requireAdmin, async (req, res, next) => {
   try {
     const q = adminText(String(req.query.q || ''), 100);
