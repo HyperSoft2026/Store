@@ -13,6 +13,7 @@ function freePort() { return new Promise((resolve,reject)=>{const s=net.createSe
  const port=await freePort();
  const child=spawn(process.execPath,['server.js'],{env:{...process.env,PORT:String(port),NODE_ENV:'test',POSTGRESQL_ADDON_URI:dbUrl,ADMIN_USERNAME:'store-integration-user',ADMIN_PASSWORD:'integration-test-password-only',ADMIN_LINK:'/integration-test-admin-route',PGSSLMODE:'disable'},stdio:['ignore','pipe','pipe']});
  let logs='';child.stdout.on('data',c=>logs+=c.toString());child.stderr.on('data',c=>logs+=c.toString());
+ let secondChild=null; let secondLogs='';
  const base='http://127.0.0.1:'+port;let cookie='',csrf='';
  const api=async(url,options={})=>{const headers={Accept:'application/json',...(options.body?{'Content-Type':'application/json'}:{}),...(cookie?{Cookie:cookie}:{}),...(options.write?{'X-CSRF-Token':csrf}:{})};const response=await fetch(base+url,{...options,headers});const set=response.headers.get('set-cookie');if(set)cookie=set.split(';')[0];return{response,data:await response.json().catch(()=>({}))};};
  try{
