@@ -55,7 +55,7 @@ function freePort(){return new Promise((resolve,reject)=>{const s=net.createServ
   await page.locator('.dialog-close').click();
   await page.locator('#search-input').fill('Browser QA Product');
   await page.locator('#search-form').locator('button[type="submit"]').click();
-  await page.getByText('Browser QA Product',{exact:true}).waitFor({state:'visible',timeout:10000});
+  await page.locator('.product-card').filter({hasText:'Browser QA Product'}).waitFor({state:'visible',timeout:10000});
   const mobileOverflow=await page.evaluate(()=>({width:document.documentElement.scrollWidth,viewport:document.documentElement.clientWidth}));
   assert.ok(mobileOverflow.width<=mobileOverflow.viewport+1,'storefront should not overflow on mobile: '+JSON.stringify(mobileOverflow));
   await page.setViewportSize({width:1280,height:900});
