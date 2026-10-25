@@ -6,9 +6,13 @@ on:
     branches: [main]
 permissions:
   contents: read
+concurrency:
+  group: store-ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:16
@@ -30,7 +34,12 @@ jobs:
           node-version: 24
       - run: npm install --ignore-scripts
       - run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - run: npm install --no-save playwright
+      - run: npx playwright install --with-deps chromium
       - run: PGPASSWORD=postgres createdb -h 127.0.0.1 -U postgres store_restore
+        env:
+          PGPASSWORD: postgres
+      - run: PGPASSWORD=postgres createdb -h 127.0.0.1 -U postgres store_browser
         env:
           PGPASSWORD: postgres
       - run: npm run check
@@ -38,3 +47,4 @@ jobs:
         env:
           TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/store_test
           STORE_RESTORE_DATABASE_URL: postgres://postgres:postgres@localhost:5432/store_restore
+          BROWSER_DATABASE_URL: postgres://postgres:postgres@localhost:5432/store_browser
