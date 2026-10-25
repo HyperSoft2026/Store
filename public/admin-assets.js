@@ -1,6 +1,7 @@
 (() => {
 'use strict';
 const $ = s => document.querySelector(s);
+const slugify = window.StoreAdminUtils.slugify;
 const state = { csrf: '', posts: [], editing: null, filter: 'all', search: '' };
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function message(id, text) { const n=$(id); n.textContent=text; n.hidden=!text; }
@@ -80,7 +81,6 @@ function setAdminView(view) {
   if (view === 'categories') loadCategories();
 }
 document.querySelectorAll('[data-admin-view]').forEach(el => el.addEventListener('click', () => setAdminView(el.dataset.adminView)));
-function slugify(value) { return String(value || '').trim().toLowerCase().replace(/[^\\p{L}\\p{N}]+/gu, '-').replace(/^-+|-+$/g, ''); }
 async function loadCategories() {
   try {
     const d = await api('/api/admin/categories');
