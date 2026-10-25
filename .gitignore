@@ -5,3 +5,7 @@ node_modules/
 npm-debug.log*
 .DS_Store
 coverage/
+
+# Local database backups (never commit these files)
+backups/
+*.dump
