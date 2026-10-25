@@ -52,6 +52,6 @@ npm run check
 يتطلب تنفيذ الأوامر تثبيت أدوات PostgreSQL (`pg_dump` و`pg_restore`) على جهاز المشغّل، وعدم تخزين رابط قاعدة البيانات في المستودع.
 
 - أنشئ نسخة: عيّن `POSTGRESQL_ADDON_URI` أو `TEST_DATABASE_URL` ثم شغّل `node scripts/backup-db.js`. يمكن تحديد المسار عبر `STORE_BACKUP_PATH`.
-- استعادة إلى قاعدة منفصلة فقط: عيّن `STORE_RESTORE_DATABASE_URL` إلى قاعدة مستهدفة منفصلة، ثم `RESTORE_CONFIRM=RESTORE_TO_TEST_DATABASE`، وشغّل `node scripts/restore-db.js /path/to/backup.dump`.
+- استعادة إلى قاعدة منفصلة فقط: عيّن `STORE_RESTORE_DATABASE_URL` إلى قاعدة منفصلة اسمها يتضمن test أو restore أو staging أو sandbox أو dev، ثم اجعل قيمة `RESTORE_CONFIRM` مساوية تماماً لـ `RESTORE_TO_DATABASE:<اسم-القاعدة>`، وشغّل `node scripts/restore-db.js /path/to/backup.dump`.
 - أمر الاستعادة قد يستبدل جداول موجودة في قاعدة الهدف. تحقّق من عنوان الهدف وخذ نسخة احتياطية منه قبل المتابعة. لا تستخدم قاعدة الإنتاج هدفاً للاستعادة التجريبية.
 - ملفات النسخ المحلية مستثناة في `.gitignore`؛ احتفظ بنسخ مشفرة خارج المستودع وجرّب الاستعادة دورياً.
