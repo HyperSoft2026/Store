@@ -14,7 +14,7 @@
   <header class="site-header">
     <div class="header-inner">
       <a class="brand" href="/" aria-label="الصفحة الرئيسية">
-        <img id="store-logo" src="/Logo.png" alt="" onerror="this.hidden=true">
+        <img id="store-logo" src="/Logo.png" alt="" onerror="if(!this.dataset.fallback){this.dataset.fallback='1';this.src='/Logo.svg'}else{this.hidden=true}">
         <span id="store-name">Store</span>
       </a>
       <form class="search-form" id="search-form" role="search">
