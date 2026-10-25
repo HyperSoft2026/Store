@@ -113,6 +113,63 @@
     }
   }
 
+
+  async function loadPosts() {
+    const grid = $('#posts-grid');
+    const count = $('#posts-count');
+    const notice = $('#posts-status');
+    try {
+      const response = await fetch('/api/posts?limit=6', { headers: { Accept: 'application/json' } });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || 'ما كدرنا نحمل المشاركات.');
+      const posts = Array.isArray(data.items) ? data.items : [];
+      count.textContent = posts.length + ' مشاركة منشورة';
+      if (!posts.length) {
+        grid.innerHTML = '<div class="posts-empty"><span>▤</span><strong>ماكو مشاركات منشورة حالياً</strong><p>المشاركات راح تظهر هنا من تنشر أول مشاركة من لوحة الإدارة.</p></div>';
+        return;
+      }
+      grid.innerHTML = posts.map(post => {
+        const image = post.coverImage
+          ? '<img src="' + escapeHtml(post.coverImage) + '" alt="" loading="lazy" onerror="this.remove()">'
+          : '<span class="post-placeholder" aria-hidden="true">▤</span>';
+        return '<article class="post-card"><button type="button" class="post-cover" data-post="' + escapeHtml(post.slug) + '">' + image + '</button><div class="post-card-body"><span class="post-card-category">' + escapeHtml(post.category || 'مشاركة') + '</span><h3>' + escapeHtml(post.title) + '</h3><p>' + escapeHtml(post.excerpt || 'افتح المشاركة لقراءة التفاصيل.') + '</p><button class="post-read" type="button" data-post="' + escapeHtml(post.slug) + '">اقرأ المشاركة <span>←</span></button></div></article>';
+      }).join('');
+      notice.hidden = true;
+    } catch (error) {
+      grid.innerHTML = '<div class="posts-empty"><strong>تعذّر تحميل المشاركات</strong><p>جرّب بعد شوية.</p></div>';
+      notice.textContent = error.message;
+      notice.hidden = false;
+    }
+  }
+
+  async function showPostDetails(slug) {
+    try {
+      const response = await fetch('/api/posts/' + encodeURIComponent(slug), { headers: { Accept: 'application/json' } });
+      const post = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(post.message || 'ما لكينا هالمشاركة.');
+      let dialog = $('#post-dialog');
+      if (!dialog) {
+        dialog = document.createElement('dialog');
+        dialog.id = 'post-dialog';
+        dialog.className = 'product-dialog post-dialog';
+        document.body.appendChild(dialog);
+        dialog.addEventListener('click', event => { if (event.target === dialog) dialog.close(); });
+      }
+      const image = post.coverImage ? '<img class="detail-image" src="' + escapeHtml(post.coverImage) + '" alt="">' : '';
+      dialog.innerHTML = '<button class="dialog-close" type="button" aria-label="إغلاق">×</button>' + image +
+        '<div class="detail-category">' + escapeHtml(post.category || 'مشاركة') + '</div><h2>' + escapeHtml(post.title) + '</h2>' +
+        (post.excerpt ? '<p class="post-detail-excerpt">' + escapeHtml(post.excerpt) + '</p>' : '') +
+        '<div class="post-detail-content"></div>';
+      dialog.querySelector('.post-detail-content').textContent = post.content || 'ماكو محتوى إضافي لهالمشاركة.';
+      dialog.querySelector('.dialog-close').addEventListener('click', () => dialog.close());
+      if (!dialog.open) dialog.showModal();
+    } catch (error) {
+      const notice = $('#posts-status');
+      notice.textContent = error.message || 'ما كدرنا نفتح المشاركة.';
+      notice.hidden = false;
+    }
+  }
+
   async function loadConfig() {
     try {
       const response = await fetch('/api/config');
@@ -149,6 +206,8 @@
   }
 
   document.addEventListener('click', (event) => {
+    const postButton = event.target.closest('[data-post]');
+    if (postButton) { event.preventDefault(); showPostDetails(postButton.dataset.post); return; }
     const categoryButton = event.target.closest('[data-category]');
     if (categoryButton) {
       event.preventDefault();
@@ -260,6 +319,7 @@
   });
 
   loadConfig();
+  loadPosts();
   loadCategories();
   loadProducts();
   const initialProductRoute = location.pathname.match(/^\/product\/([^/]+)/);
