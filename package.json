@@ -1,13 +1,13 @@
 {
   "name": "store",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "description": "Arabic Iraqi digital store powered by Express and PostgreSQL",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check public/app.js && node --check public/admin-assets.js && node --check scripts/smoke-test.js",
-    "test": "node scripts/smoke-test.js"
+    "check": "node --check server.js && node --check public/app.js && node --check public/admin-utils.js && node --check public/admin-assets.js && node --check scripts/smoke-test.js && node --check scripts/admin-utils-test.js && node --check scripts/integration-test.js",
+    "test": "node scripts/admin-utils-test.js && node scripts/smoke-test.js && node scripts/integration-test.js"
   },
   "engines": {
     "node": ">=20"
