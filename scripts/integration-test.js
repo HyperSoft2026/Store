@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { Pool } = require('pg');
+const crypto = require('node:crypto');
 const net = require('node:net');
 function freePort() { return new Promise((resolve,reject)=>{const s=net.createServer();s.once('error',reject);s.listen(0,'127.0.0.1',()=>{const p=s.address().port;s.close(e=>e?reject(e):resolve(p));});}); }
 (async()=>{
@@ -30,6 +31,7 @@ function freePort() { return new Promise((resolve,reject)=>{const s=net.createSe
   assert.ok(secondReady,'second server should connect to same database');
   const crossSession=await fetch('http://127.0.0.1:'+secondPort+'/api/admin/session',{headers:{Cookie:sessionCookie}});
   assert.equal(crossSession.status,200,'admin session should work across server instances');
+  const expiredToken='expired-session-test-token';const expiredHash=crypto.createHash('sha256').update(expiredToken).digest('hex');const expiryPool=new Pool({connectionString:dbUrl,ssl:false});await expiryPool.query("INSERT INTO store_admin_sessions(token_hash,csrf_token,expires_at) VALUES($1,$2,NOW()-INTERVAL '1 minute') ON CONFLICT(token_hash) DO UPDATE SET expires_at=NOW()-INTERVAL '1 minute'",[expiredHash,'expired-csrf']);const expiredSession=await fetch(base+'/api/admin/session',{headers:{Cookie:'store_admin_session='+expiredToken}});assert.equal(expiredSession.status,401,'expired database session must be rejected');await expiryPool.query('DELETE FROM store_admin_sessions WHERE token_hash=$1',[expiredHash]);await expiryPool.end();
   r=await api('/api/admin/categories',{method:'POST',write:true,body:JSON.stringify({name:'Integration Category',slug:'integration-category',description:'CI test'})});assert.equal(r.response.status,201,'category create');const categoryId=r.data.item.id;
   r=await api('/api/admin/categories/'+categoryId,{method:'PUT',write:true,body:JSON.stringify({name:'Updated Integration Category',slug:'integration-category',description:'updated by CI'})});assert.equal(r.response.status,200,'category update');
   r=await api('/api/admin/products',{method:'POST',write:true,body:JSON.stringify({name:'Integration Product',slug:'integration-product',categoryId,shortDescription:'CI test',description:'test',imageUrl:'',downloadUrl:'',version:'1.0',fileSize:'',developer:'CI',featured:false,published:true})});assert.equal(r.response.status,201,'product create');const productId=r.data.item.id;
@@ -66,6 +68,7 @@ function freePort() { return new Promise((resolve,reject)=>{const s=net.createSe
   }
   for(const [path,id] of [['posts',draftId],['posts',publishedId],['products',productId],['categories',categoryId]]){const d=await api('/api/admin/'+path+'/'+encodeURIComponent(id),{method:'DELETE',write:true});assert.equal(d.response.status,200,'cleanup '+path);}
   await api('/api/admin/logout',{method:'POST',write:true,body:'{}'});
+  const revokedSession=await fetch(base+'/api/admin/session',{headers:{Cookie:sessionCookie}});assert.equal(revokedSession.status,401,'logout must revoke the session in PostgreSQL');
   for(let i=0;i<8;i++){const bad=await fetch(base+'/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'wrong-user',password:'wrong-password'})});assert.equal(bad.status,401,'failed login attempt '+(i+1));}
   const limited=await fetch(base+'/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'store-integration-user',password:'integration-test-password-only'})});assert.equal(limited.status,429,'login attempts should be rate-limited persistently');
   console.log('PostgreSQL integration tests passed: schema, cross-instance sessions, persistent login throttling, CSRF, CRUD, draft privacy, download guard and backup/restore.');
