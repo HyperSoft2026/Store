@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ar-IQ" dir="rtl">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow,noarchive"><meta name="theme-color" content="#5b95f5">
+<title>إدارة المشاركات | Store</title>
+<link rel="stylesheet" href="/admin-assets.css">
+<script src="/admin-assets.js" defer></script>
+</head>
+<body>
+<div class="login-shell" id="login-screen">
+  <section class="login-card">
+    <div class="brand-mark">S</div><span class="eyebrow">مساحة الإدارة الخاصة</span>
+    <h1>أهلاً بعودتك</h1><p class="muted">سجّل دخولك حتى تدير مشاركات المتجر.</p>
+    <form id="login-form">
+      <label for="username">اسم المستخدم</label><input id="username" name="username" autocomplete="username" required maxlength="200">
+      <label for="password">كلمة المرور</label><input id="password" name="password" type="password" autocomplete="current-password" required>
+      <button class="primary-btn" type="submit" id="login-submit">تسجيل الدخول <span>←</span></button>
+      <p class="notice" id="login-notice" role="alert" hidden></p>
+    </form>
+    <p class="security-note"><span>●</span> اتصال محمي · لوحة خاصة</p>
+  </section>
+</div>
+<div class="app-shell" id="admin-screen" hidden>
+  <aside class="side-nav">
+    <a class="brand" href="#" aria-label="لوحة الإدارة"><span class="brand-mark small-mark">S</span><span>Store <small>الإدارة</small></span></a>
+    <div class="nav-caption">إدارة المحتوى</div>
+    <button class="side-link active" type="button"><span>▤</span> المشاركات <b id="nav-count">0</b></button>
+    <div class="side-bottom"><div class="admin-avatar">م</div><div><strong>مدير المتجر</strong><small>صلاحيات الإدارة</small></div><button id="logout-btn" class="logout-btn" type="button" title="تسجيل الخروج" aria-label="تسجيل الخروج">↪</button></div>
+  </aside>
+  <main class="workspace">
+    <header class="topbar"><div><span class="eyebrow">لوحة التحكم / المحتوى</span><h1>المشاركات</h1></div><button class="primary-btn new-post" id="new-post" type="button">＋ مشاركة جديدة</button></header>
+    <section class="stats-row">
+      <article class="stat-card"><span>كل المشاركات</span><strong id="stat-all">0</strong><small>المحتوى المحفوظ</small></article>
+      <article class="stat-card"><span>منشورة</span><strong id="stat-published">0</strong><small>ظاهرة للزوار</small></article>
+      <article class="stat-card"><span>مسودات</span><strong id="stat-drafts">0</strong><small>غير ظاهرة للعامة</small></article>
+    </section>
+    <section class="content-panel">
+      <div class="panel-heading"><div><h2>مكتبة المشاركات</h2><p>أنشئ المحتوى، رتّبه، وانشره وقت ما تكون جاهز.</p></div>
+        <div class="tools"><label class="search-box"><span>⌕</span><input id="post-search" type="search" placeholder="ابحث عن مشاركة..."></label>
+          <select id="status-filter" aria-label="تصفية حسب الحالة"><option value="all">كل الحالات</option><option value="published">منشورة</option><option value="draft">مسودات</option></select>
+        </div>
+      </div>
+      <div id="list-notice" class="notice" role="status" hidden></div>
+      <div class="table-wrap"><table><thead><tr><th>المشاركة</th><th>التصنيف</th><th>الحالة</th><th>آخر تحديث</th><th>إجراءات</th></tr></thead><tbody id="posts-table"><tr><td colspan="5" class="empty-cell">دا نحمل المشاركات...</td></tr></tbody></table></div>
+      <div class="list-footer"><span id="list-count">0 مشاركة</span><span>تُحفظ التغييرات في قاعدة البيانات</span></div>
+    </section>
+  </main>
+</div>
+<div class="modal-backdrop" id="editor-modal" hidden>
+  <section class="editor-card" role="dialog" aria-modal="true" aria-labelledby="editor-title">
+    <header class="editor-head"><div><span class="eyebrow">محرّر المحتوى</span><h2 id="editor-title">مشاركة جديدة</h2></div><button id="close-editor" class="icon-btn" type="button" aria-label="إغلاق">×</button></header>
+    <form id="post-form">
+      <input id="post-id" type="hidden">
+      <div class="form-grid">
+        <div class="field full"><label for="post-title">عنوان المشاركة *</label><input id="post-title" maxlength="180" required placeholder="اكتب عنواناً واضحاً"></div>
+        <div class="field"><label for="post-slug">الرابط المميز</label><input id="post-slug" maxlength="180" placeholder="يُنشأ من العنوان تلقائياً"></div>
+        <div class="field"><label for="post-category">التصنيف</label><input id="post-category" maxlength="100" placeholder="مثلاً: أخبار، شروحات"></div>
+        <div class="field full"><label for="post-excerpt">وصف مختصر</label><textarea id="post-excerpt" rows="2" maxlength="500" placeholder="ملخص يظهر في قائمة المشاركات"></textarea></div>
+        <div class="field full"><label for="post-cover">رابط صورة الغلاف</label><input id="post-cover" type="url" maxlength="1500" placeholder="https://..."></div>
+        <div class="field full"><label for="post-content">محتوى المشاركة</label><textarea id="post-content" rows="10" maxlength="50000" placeholder="اكتب محتوى المشاركة هنا..."></textarea><small>يُحفظ النص كنص عادي لتقليل مخاطر إدخال HTML غير موثوق.</small></div>
+        <div class="field full"><label for="post-status">حالة المشاركة</label><select id="post-status"><option value="draft">مسودة — غير ظاهرة للزوار</option><option value="published">نشر المشاركة</option></select></div>
+      </div>
+      <p class="notice" id="editor-notice" role="alert" hidden></p>
+      <footer class="editor-actions"><button class="secondary-btn" id="cancel-editor" type="button">إلغاء</button><button class="primary-btn" id="save-post" type="submit">حفظ المشاركة</button></footer>
+    </form>
+  </section>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+</body></html>
