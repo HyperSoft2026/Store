@@ -49,7 +49,7 @@ function freePort(){return new Promise((resolve,reject)=>{const s=net.createServ
   await page.goto(base+'/',{waitUntil:'networkidle'});
   await page.getByText('Browser QA Post',{exact:true}).waitFor({state:'visible',timeout:10000});
   await page.getByText('Browser QA Product',{exact:true}).waitFor({state:'visible',timeout:10000});
-  await page.getByRole('link',{name:/تفاصيل المنتج/}).first().click().catch(async()=>{await page.locator('[data-product="browser-qa-product"]').first().click();});
+  await page.locator('[data-product="browser-qa-product"]').first().click();
   await page.locator('#product-dialog').waitFor({state:'visible',timeout:10000});
   await page.locator('#download-product').waitFor({state:'visible',timeout:5000});
   await page.locator('.dialog-close').click();
