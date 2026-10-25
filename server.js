@@ -401,7 +401,7 @@ app.get('/api/admin/products', requireDatabase, requireAdmin, async (req, res, n
     const q = adminText(String(req.query.q || ''), 100);
     const values = [];
     let where = '';
-    if (q) { values.push('%' + q.replace(/[\\%_]/g, '\\\\app.get('/api/admin/posts', requireDatabase, requireAdmin, async (req, res, next) => {') + '%'); where = 'WHERE p.name ILIKE $1 OR p.slug ILIKE $1 OR p.developer ILIKE $1'; }
+    if (q) { values.push('%' + q + '%'); where = 'WHERE p.name ILIKE $1 OR p.slug ILIKE $1 OR p.developer ILIKE $1'; }
     const result = await pool.query('SELECT p.id,p.name,p.slug,p.category_id AS "categoryId",c.name AS "categoryName",p.short_description AS "shortDescription",p.description,p.image_url AS "imageUrl",p.download_url AS "downloadUrl",p.version,p.file_size AS "fileSize",p.developer,p.is_featured AS featured,p.is_published AS published,p.downloads,p.created_at AS "createdAt",p.updated_at AS "updatedAt" FROM store_products p LEFT JOIN store_categories c ON c.id=p.category_id ' + where + ' ORDER BY p.updated_at DESC NULLS LAST,p.created_at DESC LIMIT 500', values);
     res.json({ items: result.rows });
   } catch (error) { next(error); }
