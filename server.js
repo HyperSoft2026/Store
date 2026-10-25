@@ -17,8 +17,6 @@ const ADMIN_PATH = (function (value) {
   value = String(value || '').trim();
   return /^\/[A-Za-z0-9_-]{12,100}$/.test(value) ? value : '';
 })(process.env.ADMIN_LINK || '');
-const adminSessions = new Map();
-const adminAttempts = new Map();
 const ADMIN_COOKIE = 'store_admin_session';
 const ADMIN_SESSION_TTL = 8 * 60 * 60 * 1000;
 
@@ -30,18 +28,22 @@ function readCookie(req, name) {
   }
   return '';
 }
-function getAdminSession(req) {
+async function getAdminSession(req) {
   const token = readCookie(req, ADMIN_COOKIE);
-  const session = adminSessions.get(token);
-  if (!token || !session) return null;
-  if (session.expiresAt < Date.now()) { adminSessions.delete(token); return null; }
-  return { token: token, session: session };
+  if (!token || !pool || !databaseReady) return null;
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const result = await pool.query('SELECT csrf_token, expires_at FROM store_admin_sessions WHERE token_hash=$1 AND expires_at>NOW()', [tokenHash]);
+  if (!result.rowCount) return null;
+  return { tokenHash, session: { csrfToken: result.rows[0].csrf_token, expiresAt: new Date(result.rows[0].expires_at).getTime() } };
 }
-function requireAdmin(req, res, next) {
-  const current = getAdminSession(req);
-  if (!current) return res.status(401).json({ error: 'unauthorized', message: 'سجّل دخولك أولاً.' });
-  req.adminSession = current.session;
-  next();
+async function requireAdmin(req, res, next) {
+  try {
+    const current = await getAdminSession(req);
+    if (!current) return res.status(401).json({ error: 'unauthorized', message: 'سجّل دخولك أولاً.' });
+    req.adminSession = current.session;
+    req.adminTokenHash = current.tokenHash;
+    next();
+  } catch (error) { next(error); }
 }
 function requireAdminCsrf(req, res, next) {
   const sent = String(req.headers['x-csrf-token'] || '');
@@ -148,6 +150,23 @@ async function initializeDatabase() {
         published_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS store_admin_sessions (
+        token_hash TEXT PRIMARY KEY,
+        csrf_token TEXT NOT NULL,
+        expires_at TIMESTAMPTZ NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query('CREATE INDEX IF NOT EXISTS store_admin_sessions_expiry_idx ON store_admin_sessions (expires_at)');
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS store_admin_attempts (
+        ip TEXT PRIMARY KEY,
+        window_started TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        attempts INTEGER NOT NULL DEFAULT 0,
+        blocked_until TIMESTAMPTZ
       )
     `);
     await client.query('CREATE INDEX IF NOT EXISTS store_posts_public_idx ON store_posts (status, published_at DESC)');
@@ -313,37 +332,43 @@ app.get('/api/posts/:slug', requireDatabase, async (req, res, next) => {
 });
 
 /* Admin login uses scrypt password derivation, rate limiting and an HttpOnly session cookie. */
-app.post('/api/admin/login', async (req, res) => {
+app.post('/api/admin/login', async (req, res, next) => {
   if (!ADMIN_USERNAME || !ADMIN_PASSWORD || !ADMIN_PATH) return res.status(503).json({ message: 'إعدادات الإدارة ناقصة. راجع ADMIN_USERNAME وADMIN_PASSWORD وADMIN_LINK.' });
+  if (!pool || !databaseReady) return res.status(503).json({ message: 'قاعدة البيانات غير متاحة لتسجيل الدخول.' });
   const ip = String(req.ip || req.socket.remoteAddress || 'unknown').slice(0, 100);
-  let attempt = adminAttempts.get(ip);
-  if (attempt && Date.now() - attempt.started < 15 * 60 * 1000 && attempt.count >= 8) return res.status(429).json({ message: 'محاولات هواية. انتظر 15 دقيقة وجرّب.' });
-  if (!attempt || Date.now() - attempt.started >= 15 * 60 * 1000) attempt = { started: Date.now(), count: 0 };
   try {
+    await pool.query('DELETE FROM store_admin_sessions WHERE expires_at <= NOW()');
+    await pool.query("DELETE FROM store_admin_attempts WHERE window_started < NOW() - INTERVAL '1 day'");
+    const currentAttempt = await pool.query('SELECT attempts, window_started, blocked_until FROM store_admin_attempts WHERE ip=$1', [ip]);
+    if (currentAttempt.rowCount) {
+      const attempt = currentAttempt.rows[0];
+      if (attempt.blocked_until && new Date(attempt.blocked_until).getTime() > Date.now()) return res.status(429).json({ message: 'محاولات هواية. انتظر 15 دقيقة وجرّب.' });
+      if (Date.now() - new Date(attempt.window_started).getTime() < 15 * 60 * 1000 && attempt.attempts >= 8) return res.status(429).json({ message: 'محاولات هواية. انتظر 15 دقيقة وجرّب.' });
+    }
     const salt = 'store-admin-v1:' + ADMIN_USERNAME;
     const supplied = await scrypt(adminText(req.body && req.body.username, 200) + '\0' + String(req.body && req.body.password || ''), salt, 64);
     const expected = await scrypt(ADMIN_USERNAME + '\0' + ADMIN_PASSWORD, salt, 64);
     if (!crypto.timingSafeEqual(supplied, expected)) {
-      attempt.count += 1; adminAttempts.set(ip, attempt);
+      const updated = await pool.query("INSERT INTO store_admin_attempts(ip,window_started,attempts,blocked_until) VALUES($1,NOW(),1,NULL) ON CONFLICT(ip) DO UPDATE SET attempts=CASE WHEN store_admin_attempts.window_started < NOW() - INTERVAL '15 minutes' THEN 1 ELSE store_admin_attempts.attempts+1 END, window_started=CASE WHEN store_admin_attempts.window_started < NOW() - INTERVAL '15 minutes' THEN NOW() ELSE store_admin_attempts.window_started END, blocked_until=CASE WHEN (CASE WHEN store_admin_attempts.window_started < NOW() - INTERVAL '15 minutes' THEN 1 ELSE store_admin_attempts.attempts+1 END) >= 8 THEN NOW()+INTERVAL '15 minutes' ELSE NULL END RETURNING attempts", [ip]);
       return res.status(401).json({ message: 'اسم المستخدم أو كلمة المرور غير صحيحة.' });
     }
-    adminAttempts.delete(ip);
+    await pool.query('DELETE FROM store_admin_attempts WHERE ip=$1', [ip]);
     const token = crypto.randomBytes(32).toString('base64url');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const csrfToken = crypto.randomBytes(32).toString('base64url');
-    adminSessions.set(token, { csrfToken: csrfToken, expiresAt: Date.now() + ADMIN_SESSION_TTL });
+    const expiresAt = new Date(Date.now() + ADMIN_SESSION_TTL);
+    await pool.query('INSERT INTO store_admin_sessions(token_hash,csrf_token,expires_at) VALUES($1,$2,$3)', [tokenHash, csrfToken, expiresAt]);
     res.cookie(ADMIN_COOKIE, token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/', maxAge: ADMIN_SESSION_TTL });
-    res.json({ ok: true, csrfToken: csrfToken, expiresIn: ADMIN_SESSION_TTL });
-  } catch (error) {
-    console.error('[admin] login verification failed:', error.message);
-    res.status(500).json({ message: 'تعذّر تسجيل الدخول هسه.' });
-  }
+    res.json({ ok: true, csrfToken, expiresIn: ADMIN_SESSION_TTL });
+  } catch (error) { next(error); }
 });
 app.get('/api/admin/session', requireAdmin, (req, res) => res.json({ authenticated: true, csrfToken: req.adminSession.csrfToken, expiresAt: req.adminSession.expiresAt }));
-app.post('/api/admin/logout', requireAdmin, requireAdminCsrf, (req, res) => {
-  const current = getAdminSession(req);
-  if (current) adminSessions.delete(current.token);
-  res.clearCookie(ADMIN_COOKIE, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/' });
-  res.json({ ok: true });
+app.post('/api/admin/logout', requireAdmin, requireAdminCsrf, async (req, res, next) => {
+  try {
+    await pool.query('DELETE FROM store_admin_sessions WHERE token_hash=$1', [req.adminTokenHash]);
+    res.clearCookie(ADMIN_COOKIE, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'strict', path: '/' });
+    res.json({ ok: true });
+  } catch (error) { next(error); }
 });
 
 function parseProduct(body) {
