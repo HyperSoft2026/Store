@@ -191,6 +191,7 @@ function safeProduct(row) {
     developer: row.developer,
     featured: row.is_featured,
     downloads: Number(row.downloads || 0),
+    hasDownload: Boolean(row.download_url),
     createdAt: row.created_at
   };
 }
@@ -198,7 +199,7 @@ function safeProduct(row) {
 const PRODUCT_SELECT = `
   SELECT p.id, p.name, p.slug, p.short_description, p.description,
          p.image_url, p.version, p.file_size, p.developer, p.is_featured,
-         p.downloads, p.created_at, c.name AS category_name, c.slug AS category_slug
+         p.downloads, p.download_url, p.created_at, c.name AS category_name, c.slug AS category_slug
   FROM store_products p
   LEFT JOIN store_categories c ON c.id = p.category_id
 `;
