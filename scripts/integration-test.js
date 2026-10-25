@@ -45,6 +45,7 @@ function freePort() { return new Promise((resolve,reject)=>{const s=net.createSe
   r=await api('/api/admin/posts',{method:'POST',write:true,body:JSON.stringify({title:'Integration Published',slug:'integration-published',excerpt:'published',content:'body',coverImage:'',category:'CI',status:'published'})});assert.equal(r.response.status,201);const publishedId=r.data.item.id;
   r=await api('/api/posts/integration-published');assert.equal(r.response.status,200,'published post public');
   const noCsrf=await fetch(base+'/api/admin/posts',{method:'POST',headers:{Cookie:cookie,'Content-Type':'application/json'},body:JSON.stringify({title:'Rejected',slug:'csrf-rejected',status:'draft'})});assert.equal(noCsrf.status,403,'missing CSRF token rejected');
+  const malformedCsrf=await fetch(base+'/api/admin/posts',{method:'POST',headers:{Cookie:cookie,'Content-Type':'application/json','X-CSRF-Token':'ا'.repeat(csrf.length)},body:JSON.stringify({title:'Rejected',slug:'csrf-malformed',status:'draft'})});assert.equal(malformedCsrf.status,403,'malformed Unicode CSRF token should be rejected without server error');
   if (process.env.STORE_RESTORE_DATABASE_URL) {
     const backupPath = path.join(os.tmpdir(), 'store-integration-' + process.pid + '.dump');
     const backup = spawnSync(process.execPath, ['scripts/backup-db.js'], { env: { ...process.env, TEST_DATABASE_URL: dbUrl, STORE_BACKUP_PATH: backupPath }, stdio: 'inherit' });
