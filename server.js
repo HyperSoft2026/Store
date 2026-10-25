@@ -24,7 +24,7 @@ function readCookie(req, name) {
   const raw = req.headers.cookie || '';
   for (const item of raw.split(';')) {
     const pair = item.trim().split('=');
-    if (pair.shift() === name) return decodeURIComponent(pair.join('='));
+    if (pair.shift() === name) { try { return decodeURIComponent(pair.join('=')); } catch { return ''; } }
   }
   return '';
 }
