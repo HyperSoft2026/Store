@@ -7,8 +7,8 @@
   <meta name="description" content="Store — مكانك لاكتشاف التطبيقات والملفات الرقمية بسهولة.">
   <title>Store | متجرك الرقمي</title>
   <link rel="icon" href="/Logo.png">
-  <link rel="stylesheet" href="/styles.css?v=1">
-  <script src="/app.js?v=1" defer></script>
+  <link rel="stylesheet" href="/styles.css?v=2">
+  <script src="/app.js?v=2" defer></script>
 </head>
 <body>
   <header class="site-header">
@@ -54,6 +54,12 @@
         <div id="status-message" class="status-message" hidden></div>
         <div id="product-grid" class="product-grid" aria-live="polite"><div class="loading-card"></div><div class="loading-card"></div><div class="loading-card"></div><div class="loading-card"></div></div>
         <div class="load-more-wrap"><button id="load-more" class="load-more" type="button" hidden>عرض المزيد</button></div>
+      </section>
+
+      <section class="section posts-section" id="posts-section">
+        <div class="section-heading"><div><span class="eyebrow">منشورات المتجر</span><h2>آخر المشاركات</h2><p>مقالات وشروحات وأخبار منشورة من إدارة المتجر.</p></div><span class="result-count" id="posts-count">دا نحمل المشاركات...</span></div>
+        <div id="posts-grid" class="posts-grid" aria-live="polite"><div class="loading-card"></div><div class="loading-card"></div></div>
+        <div id="posts-status" class="status-message" hidden></div>
       </section>
 
       <section class="empty-state" id="empty-state" hidden><div class="empty-icon">⌕</div><h2>ما لكينا نتائج</h2><p>جرّب كلمة بحث ثانية أو اختار قسم مختلف.</p><button id="clear-filters" class="secondary-button" type="button">عرض كل المنتجات</button></section>
