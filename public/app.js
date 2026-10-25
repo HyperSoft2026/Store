@@ -262,4 +262,6 @@
   loadConfig();
   loadCategories();
   loadProducts();
+  const initialProductRoute = location.pathname.match(/^\/product\/([^/]+)/);
+  if (initialProductRoute) showProductDetails(decodeURIComponent(initialProductRoute[1]));
 })();
