@@ -12,7 +12,8 @@ function freePort() { return new Promise((resolve,reject)=>{const s=net.createSe
  const dbUrl=process.env.TEST_DATABASE_URL||process.env.POSTGRESQL_ADDON_URI;
  if(!dbUrl){console.log('PostgreSQL integration tests skipped: TEST_DATABASE_URL not configured.');return;}
  const port=await freePort();
- const child=spawn(process.execPath,['server.js'],{env:{...process.env,PORT:String(port),NODE_ENV:'test',POSTGRESQL_ADDON_URI:dbUrl,ADMIN_USERNAME:'store-integration-user',ADMIN_PASSWORD:'integration-test-password-only',ADMIN_LINK:'/integration-test-admin-route',PGSSLMODE:'disable'},stdio:['ignore','pipe','pipe']});
+ const appEnv={...process.env,PORT:String(port),NODE_ENV:'test',POSTGRESQL_ADDON_URI:dbUrl,ADMIN_USERNAME:'store-integration-user',ADMIN_PASSWORD:'integration-test-password-only',ADMIN_LINK:'/integration-test-admin-route',PGSSLMODE:'disable'};
+ let child=spawn(process.execPath,['server.js'],{env:appEnv,stdio:['ignore','pipe','pipe']});
  let logs='';child.stdout.on('data',c=>logs+=c.toString());child.stderr.on('data',c=>logs+=c.toString());
  let secondChild=null; let secondLogs='';
  const base='http://127.0.0.1:'+port;let cookie='',csrf='';
@@ -66,11 +67,21 @@ function freePort() { return new Promise((resolve,reject)=>{const s=net.createSe
       assert.equal(posts.rowCount, 1, 'restored backup should contain the published post');
     } finally { await restored.end(); fs.rmSync(backupPath, { force: true }); }
   }
+  child.kill('SIGTERM');
+  await new Promise(resolve=>{if(child.exitCode!==null)return resolve();const timeout=setTimeout(resolve,8000);child.once('exit',()=>{clearTimeout(timeout);resolve();});});
+  child=spawn(process.execPath,['server.js'],{env:appEnv,stdio:['ignore','pipe','pipe']});
+  child.stdout.on('data',c=>logs+=c.toString());child.stderr.on('data',c=>logs+=c.toString());
+  let restartedReady=false;const restartDeadline=Date.now()+15000;
+  while(Date.now()<restartDeadline){if(child.exitCode!==null)throw Error('Restarted server exited: '+logs);try{const health=await fetch(base+'/api/health');const data=await health.json();if(health.status===200&&data.database==='connected'){restartedReady=true;break;}}catch{}await new Promise(r=>setTimeout(r,150));}
+  assert.ok(restartedReady,'server should reconnect after restart');
+  r=await api('/api/products/integration-product');assert.equal(r.response.status,200,'product should persist across server restart');
+  r=await api('/api/posts/integration-published');assert.equal(r.response.status,200,'published post should persist across server restart');
+  r=await api('/api/admin/session');assert.equal(r.response.status,200,'database-backed admin session should persist across server restart');
   for(const [path,id] of [['posts',draftId],['posts',publishedId],['products',productId],['categories',categoryId]]){const d=await api('/api/admin/'+path+'/'+encodeURIComponent(id),{method:'DELETE',write:true});assert.equal(d.response.status,200,'cleanup '+path);}
   await api('/api/admin/logout',{method:'POST',write:true,body:'{}'});
   const revokedSession=await fetch(base+'/api/admin/session',{headers:{Cookie:sessionCookie}});assert.equal(revokedSession.status,401,'logout must revoke the session in PostgreSQL');
   for(let i=0;i<8;i++){const bad=await fetch(base+'/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'wrong-user',password:'wrong-password'})});assert.equal(bad.status,401,'failed login attempt '+(i+1));}
   const limited=await fetch(base+'/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'store-integration-user',password:'integration-test-password-only'})});assert.equal(limited.status,429,'login attempts should be rate-limited persistently');
-  console.log('PostgreSQL integration tests passed: schema, cross-instance sessions, persistent login throttling, CSRF, CRUD, draft privacy, download guard and backup/restore.');
+  console.log('PostgreSQL integration tests passed: schema, cross-instance and restart-persistent sessions, persistent login throttling, CSRF, CRUD, draft privacy, download guard and backup/restore.');
  }finally{if(secondChild)secondChild.kill('SIGTERM');child.kill('SIGTERM');await Promise.all([child,secondChild].filter(Boolean).map(proc=>new Promise(resolve=>{if(proc.exitCode!==null)return resolve();const t=setTimeout(resolve,1500);proc.once('exit',()=>{clearTimeout(t);resolve();});})));}
 })().catch(e=>{console.error(e);process.exitCode=1;});
