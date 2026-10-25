@@ -50,7 +50,7 @@ function freePort() { return new Promise((resolve,reject)=>{const s=net.createSe
     const backupPath = path.join(os.tmpdir(), 'store-integration-' + process.pid + '.dump');
     const backup = spawnSync(process.execPath, ['scripts/backup-db.js'], { env: { ...process.env, TEST_DATABASE_URL: dbUrl, STORE_BACKUP_PATH: backupPath }, stdio: 'inherit' });
     assert.equal(backup.status, 0, 'database backup command should succeed');
-    const restore = spawnSync(process.execPath, ['scripts/restore-db.js', backupPath], { env: { ...process.env, TEST_DATABASE_URL: dbUrl, STORE_RESTORE_DATABASE_URL: process.env.STORE_RESTORE_DATABASE_URL, RESTORE_CONFIRM: 'RESTORE_TO_TEST_DATABASE' }, stdio: 'inherit' });
+    const restore = spawnSync(process.execPath, ['scripts/restore-db.js', backupPath], { env: { ...process.env, TEST_DATABASE_URL: dbUrl, STORE_RESTORE_DATABASE_URL: process.env.STORE_RESTORE_DATABASE_URL, RESTORE_CONFIRM: 'RESTORE_TO_DATABASE:store_restore' }, stdio: 'inherit' });
     assert.equal(restore.status, 0, 'restore command should succeed against separate target');
     const restored = new Pool({ connectionString: process.env.STORE_RESTORE_DATABASE_URL, ssl: false });
     try {
