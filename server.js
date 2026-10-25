@@ -353,8 +353,8 @@ function parseProduct(body) {
   const categoryId = body.categoryId === '' || body.categoryId == null ? null : Number(body.categoryId);
   if (!name) return { error: 'اسم المنتج مطلوب.' };
   if (!slug) return { error: 'رابط المنتج غير صالح.' };
-  if (imageUrl && !/^https?:\\/\\//i.test(imageUrl) && !imageUrl.startsWith('/')) return { error: 'رابط صورة المنتج غير صالح.' };
-  if (downloadUrl && !/^https?:\\/\\//i.test(downloadUrl)) return { error: 'رابط التنزيل يجب أن يبدأ بـ http:// أو https://.' };
+  if (imageUrl && !/^https?:\/\//i.test(imageUrl) && !imageUrl.startsWith('/')) return { error: 'رابط صورة المنتج غير صالح.' };
+  if (downloadUrl && !/^https?:\/\//i.test(downloadUrl)) return { error: 'رابط التنزيل يجب أن يبدأ بـ http:// أو https://.' };
   if (categoryId !== null && (!Number.isSafeInteger(categoryId) || categoryId < 1)) return { error: 'القسم المحدد غير صالح.' };
   return { product: { name, slug, categoryId, shortDescription: adminText(body.shortDescription, 500), description: adminText(body.description, 20000), imageUrl, downloadUrl, version: adminText(body.version, 80), fileSize: adminText(body.fileSize, 80), developer: adminText(body.developer, 180), featured: body.featured === true, published: body.published === true } };
 }
