@@ -48,8 +48,10 @@ async function requireAdmin(req, res, next) {
 function requireAdminCsrf(req, res, next) {
   const sent = String(req.headers['x-csrf-token'] || '');
   const expected = String(req.adminSession && req.adminSession.csrfToken || '');
-  if (!sent || !expected || sent.length !== expected.length ||
-      !crypto.timingSafeEqual(Buffer.from(sent), Buffer.from(expected))) {
+  const sentBytes = Buffer.from(sent, 'utf8');
+  const expectedBytes = Buffer.from(expected, 'utf8');
+  if (!sent || !expected || sentBytes.length !== expectedBytes.length ||
+      !crypto.timingSafeEqual(sentBytes, expectedBytes)) {
     return res.status(403).json({ error: 'csrf_failed', message: 'انتهت صلاحية الطلب. حدّث الصفحة وجرّب.' });
   }
   next();
@@ -346,7 +348,7 @@ app.post('/api/admin/login', async (req, res, next) => {
       if (Date.now() - new Date(attempt.window_started).getTime() < 15 * 60 * 1000 && attempt.attempts >= 8) return res.status(429).json({ message: 'محاولات هواية. انتظر 15 دقيقة وجرّب.' });
     }
     const salt = 'store-admin-v1:' + ADMIN_USERNAME;
-    const supplied = await scrypt(adminText(req.body && req.body.username, 200) + '\0' + String(req.body && req.body.password || ''), salt, 64);
+    const supplied = await scrypt(adminText(req.body && req.body.username, 200) + '\0' + String(req.body && req.body.password || '').slice(0, 1024), salt, 64);
     const expected = await scrypt(ADMIN_USERNAME + '\0' + ADMIN_PASSWORD, salt, 64);
     if (!crypto.timingSafeEqual(supplied, expected)) {
       const updated = await pool.query("INSERT INTO store_admin_attempts(ip,window_started,attempts,blocked_until) VALUES($1,NOW(),1,NULL) ON CONFLICT(ip) DO UPDATE SET attempts=CASE WHEN store_admin_attempts.window_started < NOW() - INTERVAL '15 minutes' THEN 1 ELSE store_admin_attempts.attempts+1 END, window_started=CASE WHEN store_admin_attempts.window_started < NOW() - INTERVAL '15 minutes' THEN NOW() ELSE store_admin_attempts.window_started END, blocked_until=CASE WHEN (CASE WHEN store_admin_attempts.window_started < NOW() - INTERVAL '15 minutes' THEN 1 ELSE store_admin_attempts.attempts+1 END) >= 8 THEN NOW()+INTERVAL '15 minutes' ELSE NULL END RETURNING attempts", [ip]);
