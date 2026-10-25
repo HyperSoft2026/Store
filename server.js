@@ -135,7 +135,7 @@ async function initializeDatabase() {
       )
     `);
 
-    await client.query(\`
+    await client.query(`
       CREATE TABLE IF NOT EXISTS store_posts (
         id BIGSERIAL PRIMARY KEY,
         title TEXT NOT NULL,
@@ -149,7 +149,7 @@ async function initializeDatabase() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
-    \`);
+    `);
     await client.query('CREATE INDEX IF NOT EXISTS store_posts_public_idx ON store_posts (status, published_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS store_products_published_idx ON store_products (is_published, is_featured, created_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS store_products_category_idx ON store_products (category_id)');
