@@ -20,7 +20,14 @@ function freePort() { return new Promise((resolve,reject)=>{const s=net.createSe
   while(Date.now()<deadline){if(child.exitCode!==null)throw Error('Server exited early: '+logs);try{const r=await fetch(base+'/api/health');const d=await r.json();if(r.status===200&&d.database==='connected'){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,150));}
   assert.ok(ready,'PostgreSQL should connect and schema initialize: '+logs);
   let r=await api('/api/admin/products');assert.equal(r.response.status,401,'admin API rejects unauthenticated requests');
-  r=await api('/api/admin/login',{method:'POST',body:JSON.stringify({username:'store-integration-user',password:'integration-test-password-only'})});assert.equal(r.response.status,200,'admin login succeeds');csrf=r.data.csrfToken;assert.ok(cookie&&csrf);
+  r=await api('/api/admin/login',{method:'POST',body:JSON.stringify({username:'store-integration-user',password:'integration-test-password-only'})});assert.equal(r.response.status,200,'admin login succeeds');csrf=r.data.csrfToken;assert.ok(cookie&&csrf); const sessionCookie=cookie;
+  const secondPort=await freePort(); secondChild=spawn(process.execPath,['server.js'],{env:{...process.env,PORT:String(secondPort),NODE_ENV:'test',POSTGRESQL_ADDON_URI:dbUrl,ADMIN_USERNAME:'store-integration-user',ADMIN_PASSWORD:'integration-test-password-only',ADMIN_LINK:'/integration-test-admin-route',PGSSLMODE:'disable'},stdio:['ignore','pipe','pipe']});
+  secondChild.stdout.on('data',c=>secondLogs+=c.toString()); secondChild.stderr.on('data',c=>secondLogs+=c.toString());
+  let secondReady=false; const secondDeadline=Date.now()+15000;
+  while(Date.now()<secondDeadline){if(secondChild.exitCode!==null)throw Error('Second server exited: '+secondLogs);try{const health=await fetch('http://127.0.0.1:'+secondPort+'/api/health');const data=await health.json();if(health.status===200&&data.database==='connected'){secondReady=true;break;}}catch{}await new Promise(r=>setTimeout(r,150));}
+  assert.ok(secondReady,'second server should connect to same database');
+  const crossSession=await fetch('http://127.0.0.1:'+secondPort+'/api/admin/session',{headers:{Cookie:sessionCookie}});
+  assert.equal(crossSession.status,200,'admin session should work across server instances');
   r=await api('/api/admin/categories',{method:'POST',write:true,body:JSON.stringify({name:'Integration Category',slug:'integration-category',description:'CI test'})});assert.equal(r.response.status,201,'category create');const categoryId=r.data.item.id;
   r=await api('/api/admin/products',{method:'POST',write:true,body:JSON.stringify({name:'Integration Product',slug:'integration-product',categoryId,shortDescription:'CI test',description:'test',imageUrl:'',downloadUrl:'',version:'1.0',fileSize:'',developer:'CI',featured:false,published:true})});assert.equal(r.response.status,201,'product create');const productId=r.data.item.id;
   r=await api('/api/products?limit=10');assert.equal(r.response.status,200);const product=r.data.items.find(x=>x.slug==='integration-product');assert.ok(product,'published product public');assert.equal(product.hasDownload,false,'missing URL must not advertise download');
@@ -46,6 +53,8 @@ function freePort() { return new Promise((resolve,reject)=>{const s=net.createSe
   }
   for(const [path,id] of [['posts',draftId],['posts',publishedId],['products',productId],['categories',categoryId]]){const d=await api('/api/admin/'+path+'/'+encodeURIComponent(id),{method:'DELETE',write:true});assert.equal(d.response.status,200,'cleanup '+path);}
   await api('/api/admin/logout',{method:'POST',write:true,body:'{}'});
-  console.log('PostgreSQL integration tests passed: schema, auth, CSRF, category/product/post CRUD, draft privacy and download guard.');
- }finally{child.kill('SIGTERM');await new Promise(resolve=>{if(child.exitCode!==null)return resolve();const t=setTimeout(resolve,1500);child.once('exit',()=>{clearTimeout(t);resolve();});});}
+  for(let i=0;i<8;i++){const bad=await fetch(base+'/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'wrong-user',password:'wrong-password'})});assert.equal(bad.status,401,'failed login attempt '+(i+1));}
+  const limited=await fetch(base+'/api/admin/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:'store-integration-user',password:'integration-test-password-only'})});assert.equal(limited.status,429,'login attempts should be rate-limited persistently');
+  console.log('PostgreSQL integration tests passed: schema, cross-instance sessions, persistent login throttling, CSRF, CRUD, draft privacy, download guard and backup/restore.');
+ }finally{if(secondChild)secondChild.kill('SIGTERM');child.kill('SIGTERM');await Promise.all([child,secondChild].filter(Boolean).map(proc=>new Promise(resolve=>{if(proc.exitCode!==null)return resolve();const t=setTimeout(resolve,1500);proc.once('exit',()=>{clearTimeout(t);resolve();});})));}
 })().catch(e=>{console.error(e);process.exitCode=1;});
