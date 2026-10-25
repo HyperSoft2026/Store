@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ar-IQ" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#5b95f5">
+  <meta name="description" content="Store — مكانك لاكتشاف التطبيقات والملفات الرقمية بسهولة.">
+  <title>Store | متجرك الرقمي</title>
+  <link rel="icon" href="/Logo.png">
+  <link rel="stylesheet" href="/styles.css?v=1">
+  <script src="/app.js?v=1" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="الصفحة الرئيسية">
+        <img id="store-logo" src="/Logo.png" alt="" onerror="this.hidden=true">
+        <span id="store-name">Store</span>
+      </a>
+      <form class="search-form" id="search-form" role="search">
+        <span aria-hidden="true">⌕</span>
+        <input id="search-input" type="search" placeholder="دوّر على تطبيق أو ملف..." aria-label="البحث" autocomplete="off">
+        <button type="submit">بحث</button>
+      </form>
+      <button class="menu-toggle" id="menu-toggle" type="button" aria-label="فتح القائمة" aria-expanded="false">☰</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="sidebar" id="sidebar" aria-label="التنقل">
+      <div class="sidebar-heading">تصفّح المتجر</div>
+      <button class="nav-item active" data-category="" type="button"><span>⌂</span> الرئيسية</button>
+      <div class="sidebar-heading categories-heading">الأقسام</div>
+      <div id="category-list" class="category-list"><p class="muted small">دا نحمل الأقسام...</p></div>
+      <div class="sidebar-note"><strong>أهلاً بيك 👋</strong><p>كلشي تحتاجه، بمكان واحد.</p></div>
+    </aside>
+
+    <main class="main-content">
+      <section class="hero">
+        <div class="hero-copy">
+          <span class="eyebrow">متجرك الرقمي</span>
+          <h1>لكلشي تدور عليه، <span>تلكاه هنا.</span></h1>
+          <p>اكتشف التطبيقات والملفات الرقمية بسهولة، وبواجهة مرتبة وسريعة.</p>
+          <a class="hero-button" href="#catalog">تصفّح المنتجات <span>←</span></a>
+        </div>
+        <div class="hero-art" aria-hidden="true"><div class="art-orbit orbit-one"></div><div class="art-orbit orbit-two"></div><div class="art-tile">S<span>✦</span></div><div class="art-dot dot-one"></div><div class="art-dot dot-two"></div></div>
+      </section>
+
+      <section class="section" id="catalog">
+        <div class="section-heading">
+          <div><span class="eyebrow">اختياراتنا إلك</span><h2 id="catalog-title">أحدث المنتجات</h2><p id="catalog-subtitle">منتجات مختارة حتى تكتشف الجديد.</p></div>
+          <div class="result-count" id="result-count">دا نحمل المنتجات...</div>
+        </div>
+        <div id="status-message" class="status-message" hidden></div>
+        <div id="product-grid" class="product-grid" aria-live="polite"><div class="loading-card"></div><div class="loading-card"></div><div class="loading-card"></div><div class="loading-card"></div></div>
+        <div class="load-more-wrap"><button id="load-more" class="load-more" type="button" hidden>عرض المزيد</button></div>
+      </section>
+
+      <section class="empty-state" id="empty-state" hidden><div class="empty-icon">⌕</div><h2>ما لكينا نتائج</h2><p>جرّب كلمة بحث ثانية أو اختار قسم مختلف.</p><button id="clear-filters" class="secondary-button" type="button">عرض كل المنتجات</button></section>
+
+      <footer class="site-footer"><div class="footer-brand"><span class="footer-mark">S</span><div><strong id="footer-name">Store</strong><p>متجرك الرقمي، بلهجتنا.</p></div></div><p>© <span id="year"></span> <span id="footer-name-copy">Store</span>. جميع الحقوق محفوظة.</p></footer>
+    </main>
+  </div>
+  <div class="mobile-overlay" id="mobile-overlay" hidden></div>
+</body>
+</html>
