@@ -35,7 +35,7 @@ assert.match(styles, /--primary:#16834a/, 'storefront primary theme must be gree
 assert.match(adminStyles, /--blue:#16834a/, 'admin primary theme must be green');
 assert.ok(!adminStyles.includes('#dce9ff') && !adminStyles.includes('#e9f1ff'), 'admin stylesheet must not retain the old blue palette');
 assert.match(app, /تحميل <span aria-hidden="true">←<\/span>/, 'product card action should say تحميل');
-assert.match(app, /history\.pushState\(\{ product: slug \}, '', '\/product\/'/, 'product action must navigate to its detail URL');
+assert.match(app, /history\.pushState\(\{ product: slug \}, '', '\/product\/' \+ encodeURIComponent\(slug\)\)/, 'product action must navigate to its detail URL');
 assert.match(app, /showProductDetails\(slug\)/, 'product action must load the detail view');
 assert.ok(!storefront.includes('لوحة التحكم') && !storefront.includes('لوحة الإدارة') && !storefront.includes('/admin/index.html'), 'admin panel must not be linked from the public storefront');
 assert.match(server, /app\.get\(ADMIN_PATH/, 'admin page must only be mounted at the configured private path');
