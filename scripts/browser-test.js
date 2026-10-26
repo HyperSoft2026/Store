@@ -62,7 +62,7 @@ function freePort(){return new Promise((resolve,reject)=>{const s=net.createServ
   await page.locator('#search-form').locator('button[type="submit"]').click();
   const qaCard=page.locator('.product-card').filter({hasText:'Browser QA Product'});
   await qaCard.waitFor({state:'visible',timeout:10000});
-  assert.equal(await qaCard.locator('.product-link').innerText().then(s=>s.trim().replace(/\\s+/g,' ')),'تحميل ←','product card action should display تحميل');
+  assert.equal(await qaCard.locator('.product-link').innerText().then(s=>s.trim().replace(/\s+/g,' ')),'تحميل ←','product card action should display تحميل');
   await qaCard.locator('.product-link').click();
   await page.locator('#product-dialog').waitFor({state:'visible',timeout:10000});
   assert.equal(new URL(page.url()).pathname,'/product/browser-qa-product','تحميل should navigate to product details');
