@@ -6,14 +6,14 @@ const storefront = fs.readFileSync(require.resolve('../public/index.html'), 'utf
 const app = fs.readFileSync(require.resolve('../public/app.js'), 'utf8');
 const server = fs.readFileSync(require.resolve('../server.js'), 'utf8');
 assert.match(admin, /name="robots" content="noindex,nofollow,noarchive"/, 'admin page should discourage indexing');
-assert.ok(admin.indexOf('/admin-utils.js?v=0.0.2') < admin.indexOf('/admin-assets.js?v=0.0.2'), 'slug utility must load before admin controller');
+assert.ok(admin.indexOf('/admin-utils.js?v=0.0.3') < admin.indexOf('/admin-assets.js?v=0.0.3'), 'slug utility must load before admin controller');
 assert.match(admin, /id="login-form"/, 'admin login form should exist');
 assert.match(admin, /id="post-form"/, 'post editor form should exist');
 assert.match(admin, /id="product-form"/, 'product editor form should exist');
 assert.match(admin, /id="category-form"/, 'category editor form should exist');
-assert.ok(storefront.includes('/styles.css?v=0.0.2'), 'storefront CSS cache key should match release');
-assert.ok(storefront.includes('/app.js?v=0.0.2'), 'storefront JS cache key should match release');
-assert.ok(app.includes('/posts.css?v=0.0.2'), 'posts CSS cache key should match release');
+assert.ok(storefront.includes('/styles.css?v=0.0.3'), 'storefront CSS cache key should match release');
+assert.ok(storefront.includes('/app.js?v=0.0.3'), 'storefront JS cache key should match release');
+assert.ok(app.includes('/posts.css?v=0.0.3'), 'posts CSS cache key should match release');
 assert.match(app, /downloadButton.hidden = !item.hasDownload/, 'unavailable download button should be hidden');
 assert.match(app, /const requestId = \+\+state\.requestId/, 'each product load should have a unique request id');
 assert.match(app, /if \(requestId !== state\.requestId\) return/, 'stale product responses should be ignored');
@@ -22,3 +22,8 @@ assert.ok(!server.includes('downloadUrl: row.download_url'), 'public API must no
 assert.match(server, /store_admin_sessions/, 'admin sessions should be database-backed');
 assert.match(server, /store_admin_attempts/, 'login throttling should be database-backed');
 console.log('UI contract tests passed: admin forms, script order, cache keys and download availability.');
+
+assert.match(storefront, /aria-controls="sidebar"/, 'main menu button should control the navigation drawer');
+assert.ok(app.includes('تحميل <span aria-hidden="true">←</span>'), 'product card action should say تحميل');
+assert.ok(!storefront.includes('لوحة التحكم') && !storefront.includes('لوحة الإدارة'), 'admin panel must not be linked from the public storefront');
+assert.match(server, /app\.get\(ADMIN_PATH/, 'admin page must only be mounted at the configured private path');
