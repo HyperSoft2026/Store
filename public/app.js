@@ -3,7 +3,7 @@
 
   const $ = (selector) => document.querySelector(selector);
   const postsStyle = document.createElement('link');
-  postsStyle.rel = 'stylesheet'; postsStyle.href = '/posts.css?v=0.0.2'; document.head.appendChild(postsStyle);
+  postsStyle.rel = 'stylesheet'; postsStyle.href = '/posts.css?v=0.0.3'; document.head.appendChild(postsStyle);
   const state = { query: '', category: '', offset: 0, limit: 24, total: 0, loading: false, requestId: 0 };
   const grid = $('#product-grid');
   const status = $('#status-message');
@@ -37,7 +37,7 @@
     const size = item.fileSize ? `<span>${escapeHtml(item.fileSize)}</span>` : '';
     return `
       <article class="product-card">
-        <a class="product-image-wrap" href="/product/${encodeURIComponent(item.slug)}" data-product="${escapeHtml(item.slug)}" aria-label="تفاصيل ${escapeHtml(item.name)}">
+        <a class="product-image-wrap" href="/product/${encodeURIComponent(item.slug)}" data-product="${escapeHtml(item.slug)}" aria-label="فتح صفحة ${escapeHtml(item.name)}">
           ${image}
           ${item.featured ? '<span class="product-badge">مميّز</span>' : ''}
         </a>
@@ -46,7 +46,7 @@
           <h3 class="product-title">${escapeHtml(item.name)}</h3>
           <p class="product-description">${escapeHtml(item.shortDescription || item.description || 'تفاصيل المنتج راح تلكاها بصفحة المنتج.')}</p>
           <div class="product-meta">${version}${size}</div>
-          <a class="product-link" href="/product/${encodeURIComponent(item.slug)}" data-product="${escapeHtml(item.slug)}">التفاصيل والتنزيل <span aria-hidden="true">←</span></a>
+          <a class="product-link" href="/product/${encodeURIComponent(item.slug)}" data-product="${escapeHtml(item.slug)}">تحميل <span aria-hidden="true">←</span></a>
         </div>
       </article>`;
   }
@@ -204,6 +204,7 @@
     $('#mobile-overlay').classList.remove('show');
     $('#mobile-overlay').hidden = true;
     $('#menu-toggle').setAttribute('aria-expanded', 'false');
+    document.body.classList.remove('menu-open');
   }
 
   document.addEventListener('click', (event) => {
@@ -309,8 +310,10 @@
     $('#mobile-overlay').hidden = !open;
     $('#mobile-overlay').classList.toggle('show', open);
     $('#menu-toggle').setAttribute('aria-expanded', String(open));
+    document.body.classList.toggle('menu-open', open);
   });
   $('#mobile-overlay').addEventListener('click', closeMenu);
+  document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeMenu(); });
   $('#year').textContent = String(new Date().getFullYear());
   window.addEventListener('popstate', () => {
     const match = location.pathname.match(/^\/product\/([^/]+)/);
