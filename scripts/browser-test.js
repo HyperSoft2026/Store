@@ -47,6 +47,11 @@ function freePort(){return new Promise((resolve,reject)=>{const s=net.createServ
   await page.locator('#product-save').click();
   await page.getByText('تم حفظ المنتج.',{exact:true}).waitFor({state:'visible',timeout:10000});
   await page.goto(base+'/',{waitUntil:'networkidle'});
+  await page.locator('#menu-toggle').click();
+  assert.ok(await page.locator('#sidebar').evaluate(el=>el.classList.contains('open')),'hamburger should open the navigation drawer');
+  assert.equal(await page.locator('#menu-toggle').getAttribute('aria-expanded'),'true','hamburger should expose expanded state');
+  await page.keyboard.press('Escape');
+  assert.ok(!(await page.locator('#sidebar').evaluate(el=>el.classList.contains('open'))),'Escape should close the navigation drawer');
   await page.getByText('Browser QA Post',{exact:true}).waitFor({state:'visible',timeout:10000});
   await page.getByText('Browser QA Product',{exact:true}).waitFor({state:'visible',timeout:10000});
   await page.locator('[data-product="browser-qa-product"]').first().click();
@@ -55,7 +60,14 @@ function freePort(){return new Promise((resolve,reject)=>{const s=net.createServ
   await page.locator('.dialog-close').click();
   await page.locator('#search-input').fill('Browser QA Product');
   await page.locator('#search-form').locator('button[type="submit"]').click();
-  await page.locator('.product-card').filter({hasText:'Browser QA Product'}).waitFor({state:'visible',timeout:10000});
+  const qaCard=page.locator('.product-card').filter({hasText:'Browser QA Product'});
+  await qaCard.waitFor({state:'visible',timeout:10000});
+  assert.equal(await qaCard.locator('.product-link').innerText().then(s=>s.trim().replace(/\\s+/g,' ')),'تحميل ←','product card action should display تحميل');
+  await qaCard.locator('.product-link').click();
+  await page.locator('#product-dialog').waitFor({state:'visible',timeout:10000});
+  assert.equal(new URL(page.url()).pathname,'/product/browser-qa-product','تحميل should navigate to product details');
+  await page.locator('#product-dialog .dialog-close').click();
+  await page.waitForURL('**/',{timeout:5000});
   const mobileOverflow=await page.evaluate(()=>({width:document.documentElement.scrollWidth,viewport:document.documentElement.clientWidth}));
   assert.ok(mobileOverflow.width<=mobileOverflow.viewport+1,'storefront should not overflow on mobile: '+JSON.stringify(mobileOverflow));
   await page.setViewportSize({width:1280,height:900});
