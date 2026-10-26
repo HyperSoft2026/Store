@@ -33,6 +33,7 @@ assert.match(storefront, /aria-controls="sidebar"/, 'main menu button should con
 assert.match(styles, /\[hidden\]\s*\{display:none!important\}/, 'hidden overlay must remain hidden until opened');
 assert.match(styles, /--primary:#16834a/, 'storefront primary theme must be green');
 assert.match(adminStyles, /--blue:#16834a/, 'admin primary theme must be green');
+assert.ok(!adminStyles.includes('#dce9ff') && !adminStyles.includes('#e9f1ff'), 'admin stylesheet must not retain the old blue palette');
 assert.match(app, /تحميل <span aria-hidden="true">←<\/span>/, 'product card action should say تحميل');
 assert.match(app, /history\.pushState\(\{ product: slug \}, '', '\/product\/'/, 'product action must navigate to its detail URL');
 assert.match(app, /showProductDetails\(slug\)/, 'product action must load the detail view');
