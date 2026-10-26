@@ -3,7 +3,7 @@
 
   const $ = (selector) => document.querySelector(selector);
   const postsStyle = document.createElement('link');
-  postsStyle.rel = 'stylesheet'; postsStyle.href = '/posts.css?v=0.0.3'; document.head.appendChild(postsStyle);
+  postsStyle.rel = 'stylesheet'; postsStyle.href = '/posts.css?v=0.0.4'; document.head.appendChild(postsStyle);
   const state = { query: '', category: '', offset: 0, limit: 24, total: 0, loading: false, requestId: 0 };
   const grid = $('#product-grid');
   const status = $('#status-message');
@@ -306,11 +306,15 @@
   });
   $('#menu-toggle').addEventListener('click', () => {
     const open = !$('#sidebar').classList.contains('open');
-    $('#sidebar').classList.toggle('open', open);
-    $('#mobile-overlay').hidden = !open;
-    $('#mobile-overlay').classList.toggle('show', open);
-    $('#menu-toggle').setAttribute('aria-expanded', String(open));
-    document.body.classList.toggle('menu-open', open);
+    if (open) {
+      $('#sidebar').classList.add('open');
+      $('#mobile-overlay').hidden = false;
+      $('#mobile-overlay').classList.add('show');
+      document.body.classList.add('menu-open');
+      $('#menu-toggle').setAttribute('aria-expanded', 'true');
+    } else {
+      closeMenu();
+    }
   });
   $('#mobile-overlay').addEventListener('click', closeMenu);
   document.addEventListener('keydown', (event) => { if (event.key === 'Escape') closeMenu(); });
