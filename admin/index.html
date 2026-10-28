@@ -4,9 +4,9 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex,nofollow,noarchive"><meta name="theme-color" content="#16834a">
 <title>إدارة المشاركات | Store</title>
-<link rel="stylesheet" href="/admin-assets.css?v=0.0.4">
-<script src="/admin-utils.js?v=0.0.4" defer></script>
-<script src="/admin-assets.js?v=0.0.4" defer></script>
+<link rel="stylesheet" href="/admin-assets.css?v=0.0.5">
+<script src="/admin-utils.js?v=0.0.5" defer></script>
+<script src="/admin-assets.js?v=0.0.5" defer></script>
 </head>
 <body>
 <div class="login-shell" id="login-screen">
@@ -42,7 +42,7 @@
       <div class="field"><label for="product-category">القسم</label><select id="product-category"><option value="">بدون قسم</option></select></div><div class="field"><label for="product-developer">المطوّر</label><input id="product-developer" maxlength="180"></div>
       <div class="field full"><label for="product-short">وصف مختصر</label><input id="product-short" maxlength="500"></div><div class="field full"><label for="product-description">الوصف</label><textarea id="product-description" rows="4" maxlength="20000"></textarea></div>
       <div class="field"><label for="product-image">رابط الصورة</label><input id="product-image" maxlength="1500" placeholder="https://... أو /image.png"></div><div class="field"><label for="product-download">رابط التنزيل</label><input id="product-download" maxlength="2000" placeholder="https://..."></div>
-      <div class="field"><label for="product-version">الإصدار</label><input id="product-version" maxlength="80"></div><div class="field"><label for="product-size">حجم الملف</label><input id="product-size" maxlength="80"></div>
+      <div class="field"><label for="product-version">الإصدار</label><input id="product-version" maxlength="80"></div><div class="field"><label for="product-size">حجم الملف</label><input id="product-size" maxlength="80"></div><div class="field"><label for="product-rating">التقييم (من 0 إلى 5)</label><input id="product-rating" type="number" min="0" max="5" step="0.1" placeholder="اتركه فارغاً إذا لا يوجد تقييم"></div>
       <div class="field"><label><input id="product-featured" type="checkbox"> منتج مميّز</label></div><div class="field"><label><input id="product-published" type="checkbox"> منشور للزوار</label></div>
       </div><p class="notice" id="product-editor-notice" role="alert" hidden></p><footer class="editor-actions"><button class="secondary-btn" id="product-cancel" type="button">إلغاء التعديل</button><button class="primary-btn" id="product-save" type="submit">حفظ المنتج</button></footer></form></section>
     </section>

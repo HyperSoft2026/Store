@@ -120,6 +120,7 @@ function editProduct(p) {
   $('#product-short').value = p.shortDescription || ''; $('#product-description').value = p.description || '';
   $('#product-image').value = p.imageUrl || ''; $('#product-download').value = p.downloadUrl || '';
   $('#product-version').value = p.version || ''; $('#product-size').value = p.fileSize || '';
+  $('#product-rating').value = p.rating == null ? '' : p.rating;
   $('#product-featured').checked = !!p.featured; $('#product-published').checked = !!p.published;
   $('#product-editor-title').textContent = 'تعديل المنتج'; $('#product-editor-notice').hidden = true;
   setAdminView('products'); $('#product-name').focus();
@@ -134,7 +135,8 @@ $('#product-form').addEventListener('submit', async e => {
   const p = { name: $('#product-name').value, slug: $('#product-slug').value, categoryId: $('#product-category').value || null,
     developer: $('#product-developer').value, shortDescription: $('#product-short').value, description: $('#product-description').value,
     imageUrl: $('#product-image').value, downloadUrl: $('#product-download').value, version: $('#product-version').value,
-    fileSize: $('#product-size').value, featured: $('#product-featured').checked, published: $('#product-published').checked };
+    fileSize: $('#product-size').value, rating: $('#product-rating').value === '' ? null : Number($('#product-rating').value),
+    featured: $('#product-featured').checked, published: $('#product-published').checked };
   const b = $('#product-save'); b.disabled = true; b.textContent = 'دا نحفظ...';
   try { await api(id ? '/api/admin/products/' + encodeURIComponent(id) : '/api/admin/products', { method: id ? 'PUT' : 'POST', body: JSON.stringify(p) }); resetProductForm(); await loadProducts(); notice('#products-notice', 'تم حفظ المنتج.'); }
   catch (err) { notice('#product-editor-notice', err.message); }

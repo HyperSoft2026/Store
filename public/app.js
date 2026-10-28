@@ -3,7 +3,7 @@
 
   const $ = (selector) => document.querySelector(selector);
   const postsStyle = document.createElement('link');
-  postsStyle.rel = 'stylesheet'; postsStyle.href = '/posts.css?v=0.0.4'; document.head.appendChild(postsStyle);
+  postsStyle.rel = 'stylesheet'; postsStyle.href = '/posts.css?v=0.0.5'; document.head.appendChild(postsStyle);
   const state = { query: '', category: '', offset: 0, limit: 24, total: 0, loading: false, requestId: 0 };
   const grid = $('#product-grid');
   const status = $('#status-message');
@@ -29,24 +29,24 @@
   }
 
   function productCard(item) {
-    const image = item.imageUrl
-      ? `<img class="product-image" src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.name)}" loading="lazy" onerror="this.remove()">`
-      : `<div class="product-image-placeholder" aria-hidden="true">${iconFor(item.name)}</div>`;
-    const category = item.category ? `<div class="product-category">${escapeHtml(item.category)}</div>` : '<div class="product-category">منتج رقمي</div>';
+    const slug = encodeURIComponent(item.slug);
+    const image = item.imageUrl ? `<img class="product-image" src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.name)}" loading="lazy" onerror="this.remove()">` : `<div class="product-image-placeholder" aria-hidden="true">${iconFor(item.name)}</div>`;
+    const rating = item.rating == null || !Number.isFinite(Number(item.rating)) ? null : Math.max(0, Math.min(5, Number(item.rating)));
+    const ratingText = rating == null ? '—' : rating.toFixed(1);
+    const ratingLabel = rating == null ? 'لا يوجد تقييم متاح' : `التقييم ${ratingText} من 5`;
+    const stars = Array.from({ length: 5 }, (_, index) => { const fill = rating == null ? 0 : Math.max(0, Math.min(1, rating - index)) * 100; return `<span class="rating-star" aria-hidden="true" style="--star-fill:${fill}%">★</span>`; }).join('');
+    const category = item.category ? `<span class="product-category">${escapeHtml(item.category)}</span>` : '<span class="product-category">منتج رقمي</span>';
     const version = item.version ? `<span>الإصدار ${escapeHtml(item.version)}</span>` : '<span>متوفر بالمتجر</span>';
     const size = item.fileSize ? `<span>${escapeHtml(item.fileSize)}</span>` : '';
     return `
       <article class="product-card">
-        <a class="product-image-wrap" href="/product/${encodeURIComponent(item.slug)}" data-product="${escapeHtml(item.slug)}" aria-label="فتح صفحة ${escapeHtml(item.name)}">
-          ${image}
-          ${item.featured ? '<span class="product-badge">مميّز</span>' : ''}
-        </a>
+        <a class="product-image-wrap" href="/product/${slug}" data-product="${escapeHtml(item.slug)}" aria-label="فتح صفحة ${escapeHtml(item.name)}">${image}${item.featured ? '<span class="product-badge">مميّز</span>' : ''}</a>
         <div class="product-body">
-          ${category}
-          <h3 class="product-title">${escapeHtml(item.name)}</h3>
+          <h3 class="product-title"><a href="/product/${slug}" data-product="${escapeHtml(item.slug)}">${escapeHtml(item.name)}</a></h3>
+          <div class="product-rating" aria-label="${ratingLabel}"><span class="rating-value">${ratingText}</span><span class="rating-stars" role="img" aria-label="${ratingLabel}">${stars}</span></div>
+          <a class="product-link" href="/product/${slug}" data-product="${escapeHtml(item.slug)}">تحميل <span aria-hidden="true">←</span></a>
           <p class="product-description">${escapeHtml(item.shortDescription || item.description || 'تفاصيل المنتج راح تلكاها بصفحة المنتج.')}</p>
-          <div class="product-meta">${version}${size}</div>
-          <a class="product-link" href="/product/${encodeURIComponent(item.slug)}" data-product="${escapeHtml(item.slug)}">تحميل <span aria-hidden="true">←</span></a>
+          <div class="product-meta">${category}${version}${size}</div>
         </div>
       </article>`;
   }
@@ -252,6 +252,10 @@
         ${image}
         <div class="detail-category">${escapeHtml(item.category || 'منتج رقمي')}</div>
         <h2>${escapeHtml(item.name)}</h2>
+        <div class="product-rating detail-rating" aria-label="${item.rating == null ? 'لا يوجد تقييم متاح' : `التقييم ${Number(item.rating).toFixed(1)} من 5`}">
+          <span class="rating-value">${item.rating == null ? '—' : Number(item.rating).toFixed(1)}</span>
+          <span class="rating-stars" role="img" aria-label="التقييم من خمس نجوم">${Array.from({ length: 5 }, (_, index) => { const rating = item.rating == null ? 0 : Math.max(0, Math.min(5, Number(item.rating))); const fill = Math.max(0, Math.min(1, rating - index)) * 100; return `<span class="rating-star" aria-hidden="true" style="--star-fill:${fill}%">★</span>`; }).join('')}</span>
+        </div>
         <p class="detail-description">${escapeHtml(item.description || item.shortDescription || 'ماكو وصف إضافي لهذا المنتج حالياً.')}</p>
         <div class="detail-facts">${item.developer ? `<span>المطوّر: ${escapeHtml(item.developer)}</span>` : ''}${item.version ? `<span>الإصدار: ${escapeHtml(item.version)}</span>` : ''}${item.fileSize ? `<span>الحجم: ${escapeHtml(item.fileSize)}</span>` : ''}</div>
         <button class="download-button" type="button" id="download-product">تنزيل المنتج <span>↓</span></button>

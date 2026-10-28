@@ -43,6 +43,7 @@ function freePort(){return new Promise((resolve,reject)=>{const s=net.createServ
   await page.locator('#product-description').fill('Product details for browser acceptance tests.');
   await page.locator('#product-download').fill('https://example.test/browser-qa.apk');
   await page.locator('#product-version').fill('1.0');
+  await page.locator('#product-rating').fill('4.2');
   await page.locator('#product-published').check();
   await page.locator('#product-save').click();
   await page.getByText('تم حفظ المنتج.',{exact:true}).waitFor({state:'visible',timeout:10000});
@@ -62,6 +63,9 @@ function freePort(){return new Promise((resolve,reject)=>{const s=net.createServ
   await page.locator('#search-form').locator('button[type="submit"]').click();
   const qaCard=page.locator('.product-card').filter({hasText:'Browser QA Product'});
   await qaCard.waitFor({state:'visible',timeout:10000});
+  assert.equal((await qaCard.locator('.rating-value').innerText()).trim(),'4.2','product card should display its database rating');
+  assert.equal(await qaCard.locator('.rating-star').count(),5,'product card should render five stars');
+  assert.equal(await qaCard.locator('.product-title a').getAttribute('href'),'/product/browser-qa-product','product title should link to details');
   assert.equal(await qaCard.locator('.product-link').innerText().then(s=>s.trim().replace(/\s+/g,' ')),'تحميل ←','product card action should display تحميل');
   await qaCard.locator('.product-link').click();
   await page.locator('#product-dialog').waitFor({state:'visible',timeout:10000});

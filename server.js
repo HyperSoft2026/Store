@@ -131,6 +131,7 @@ async function initializeDatabase() {
         version TEXT NOT NULL DEFAULT '',
         file_size TEXT NOT NULL DEFAULT '',
         developer TEXT NOT NULL DEFAULT '',
+        rating NUMERIC(2,1) CHECK (rating IS NULL OR (rating >= 0 AND rating <= 5)),
         is_featured BOOLEAN NOT NULL DEFAULT FALSE,
         is_published BOOLEAN NOT NULL DEFAULT FALSE,
         downloads BIGINT NOT NULL DEFAULT 0,
@@ -162,6 +163,7 @@ async function initializeDatabase() {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )
     `);
+    await client.query('ALTER TABLE store_products ADD COLUMN IF NOT EXISTS rating NUMERIC(2,1) CHECK (rating IS NULL OR (rating >= 0 AND rating <= 5))');
     await client.query('CREATE INDEX IF NOT EXISTS store_admin_sessions_expiry_idx ON store_admin_sessions (expires_at)');
     await client.query(`
       CREATE TABLE IF NOT EXISTS store_admin_attempts (
@@ -210,6 +212,7 @@ function safeProduct(row) {
     version: row.version,
     fileSize: row.file_size,
     developer: row.developer,
+    rating: row.rating == null ? null : Number(row.rating),
     featured: row.is_featured,
     downloads: Number(row.downloads || 0),
     hasDownload: Boolean(row.download_url),
@@ -219,7 +222,7 @@ function safeProduct(row) {
 
 const PRODUCT_SELECT = `
   SELECT p.id, p.name, p.slug, p.short_description, p.description,
-         p.image_url, p.version, p.file_size, p.developer, p.is_featured,
+         p.image_url, p.version, p.file_size, p.developer, p.rating, p.is_featured,
          p.downloads, p.download_url, p.created_at, c.name AS category_name, c.slug AS category_slug
   FROM store_products p
   LEFT JOIN store_categories c ON c.id = p.category_id
@@ -378,13 +381,15 @@ function parseProduct(body) {
   const slug = adminSlug(body.slug || name);
   const imageUrl = adminText(body.imageUrl, 1500);
   const downloadUrl = adminText(body.downloadUrl, 2000);
+  const rating = body.rating === '' || body.rating == null ? null : Number(body.rating);
   const categoryId = body.categoryId === '' || body.categoryId == null ? null : Number(body.categoryId);
   if (!name) return { error: 'اسم المنتج مطلوب.' };
   if (!slug) return { error: 'رابط المنتج غير صالح.' };
   if (imageUrl && !/^https?:\/\//i.test(imageUrl) && !imageUrl.startsWith('/')) return { error: 'رابط صورة المنتج غير صالح.' };
   if (downloadUrl && !/^https?:\/\//i.test(downloadUrl)) return { error: 'رابط التنزيل يجب أن يبدأ بـ http:// أو https://.' };
+  if (rating !== null && (!Number.isFinite(rating) || rating < 0 || rating > 5 || Math.round(rating * 10) !== rating * 10)) return { error: 'التقييم يجب أن يكون بين 0 و5 وبحد أقصى منزلة عشرية واحدة.' };
   if (categoryId !== null && (!Number.isSafeInteger(categoryId) || categoryId < 1)) return { error: 'القسم المحدد غير صالح.' };
-  return { product: { name, slug, categoryId, shortDescription: adminText(body.shortDescription, 500), description: adminText(body.description, 20000), imageUrl, downloadUrl, version: adminText(body.version, 80), fileSize: adminText(body.fileSize, 80), developer: adminText(body.developer, 180), featured: body.featured === true, published: body.published === true } };
+  return { product: { name, slug, categoryId, shortDescription: adminText(body.shortDescription, 500), description: adminText(body.description, 20000), imageUrl, downloadUrl, version: adminText(body.version, 80), fileSize: adminText(body.fileSize, 80), developer: adminText(body.developer, 180), rating, featured: body.featured === true, published: body.published === true } };
 }
 function parseCategory(body) {
   const name = adminText(body.name, 100);
@@ -430,7 +435,7 @@ app.get('/api/admin/products', requireDatabase, requireAdmin, async (req, res, n
     const values = [];
     let where = '';
     if (q) { values.push('%' + q + '%'); where = 'WHERE p.name ILIKE $1 OR p.slug ILIKE $1 OR p.developer ILIKE $1'; }
-    const result = await pool.query('SELECT p.id,p.name,p.slug,p.category_id AS "categoryId",c.name AS "categoryName",p.short_description AS "shortDescription",p.description,p.image_url AS "imageUrl",p.download_url AS "downloadUrl",p.version,p.file_size AS "fileSize",p.developer,p.is_featured AS featured,p.is_published AS published,p.downloads,p.created_at AS "createdAt",p.updated_at AS "updatedAt" FROM store_products p LEFT JOIN store_categories c ON c.id=p.category_id ' + where + ' ORDER BY p.updated_at DESC NULLS LAST,p.created_at DESC LIMIT 500', values);
+    const result = await pool.query('SELECT p.id,p.name,p.slug,p.category_id AS "categoryId",c.name AS "categoryName",p.short_description AS "shortDescription",p.description,p.image_url AS "imageUrl",p.download_url AS "downloadUrl",p.version,p.file_size AS "fileSize",p.developer,p.rating,p.is_featured AS featured,p.is_published AS published,p.downloads,p.created_at AS "createdAt",p.updated_at AS "updatedAt" FROM store_products p LEFT JOIN store_categories c ON c.id=p.category_id ' + where + ' ORDER BY p.updated_at DESC NULLS LAST,p.created_at DESC LIMIT 500', values);
     res.json({ items: result.rows });
   } catch (error) { next(error); }
 });
@@ -440,7 +445,7 @@ app.post('/api/admin/products', requireDatabase, requireAdmin, requireAdminCsrf,
   const p = parsed.product;
   try {
     if (p.categoryId !== null) { const c = await pool.query('SELECT id FROM store_categories WHERE id=$1', [p.categoryId]); if (!c.rowCount) return res.status(400).json({ message: 'القسم المحدد غير موجود.' }); }
-    const result = await pool.query('INSERT INTO store_products(name,slug,category_id,short_description,description,image_url,download_url,version,file_size,developer,is_featured,is_published) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id,name,slug', [p.name,p.slug,p.categoryId,p.shortDescription,p.description,p.imageUrl,p.downloadUrl,p.version,p.fileSize,p.developer,p.featured,p.published]);
+    const result = await pool.query('INSERT INTO store_products(name,slug,category_id,short_description,description,image_url,download_url,version,file_size,developer,rating,is_featured,is_published) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id,name,slug,rating', [p.name,p.slug,p.categoryId,p.shortDescription,p.description,p.imageUrl,p.downloadUrl,p.version,p.fileSize,p.developer,p.rating,p.featured,p.published]);
     res.status(201).json({ item: result.rows[0] });
   } catch (error) { if (error.code === '23505') return res.status(409).json({ message: 'رابط المنتج مستخدم مسبقاً.' }); next(error); }
 });
@@ -450,7 +455,7 @@ app.put('/api/admin/products/:id', requireDatabase, requireAdmin, requireAdminCs
   const p = parsed.product;
   try {
     if (p.categoryId !== null) { const c = await pool.query('SELECT id FROM store_categories WHERE id=$1', [p.categoryId]); if (!c.rowCount) return res.status(400).json({ message: 'القسم المحدد غير موجود.' }); }
-    const result = await pool.query('UPDATE store_products SET name=$1,slug=$2,category_id=$3,short_description=$4,description=$5,image_url=$6,download_url=$7,version=$8,file_size=$9,developer=$10,is_featured=$11,is_published=$12,updated_at=NOW() WHERE id=$13 RETURNING id,name,slug', [p.name,p.slug,p.categoryId,p.shortDescription,p.description,p.imageUrl,p.downloadUrl,p.version,p.fileSize,p.developer,p.featured,p.published,req.params.id]);
+    const result = await pool.query('UPDATE store_products SET name=$1,slug=$2,category_id=$3,short_description=$4,description=$5,image_url=$6,download_url=$7,version=$8,file_size=$9,developer=$10,rating=$11,is_featured=$12,is_published=$13,updated_at=NOW() WHERE id=$14 RETURNING id,name,slug,rating', [p.name,p.slug,p.categoryId,p.shortDescription,p.description,p.imageUrl,p.downloadUrl,p.version,p.fileSize,p.developer,p.rating,p.featured,p.published,req.params.id]);
     if (!result.rowCount) return res.status(404).json({ message: 'المنتج غير موجود.' });
     res.json({ item: result.rows[0] });
   } catch (error) { if (error.code === '23505') return res.status(409).json({ message: 'رابط المنتج مستخدم مسبقاً.' }); next(error); }
