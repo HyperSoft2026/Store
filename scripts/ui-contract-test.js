@@ -41,7 +41,7 @@ assert.ok(!storefront.includes('لوحة التحكم') && !storefront.includes(
 assert.match(server, /app\.get\(ADMIN_PATH/, 'admin page must only be mounted at the configured private path');
 assert.match(server, /ALTER TABLE store_products ADD COLUMN IF NOT EXISTS rating NUMERIC\(2,1\)/, 'existing databases should receive a nullable rating column');
 assert.match(server, /rating: row\.rating == null \? null : Number\(row\.rating\)/, 'API should return the actual nullable rating from PostgreSQL');
-assert.match(server, /rating=p\.rating/, 'admin product updates should persist rating');
+assert.match(server, /rating=\$11/, 'admin product updates should persist rating');
 assert.match(app, /class="product-rating"/, 'product cards should show the rating row');
 assert.match(app, /class="rating-star"/, 'product cards should render five fractional-fill stars');
 assert.match(app, /<h3 class="product-title"><a href="\\/product\\//, 'product title should link to details');
