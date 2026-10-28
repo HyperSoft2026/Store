@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#16834a">
-  <meta name="description" content="Store — مكانك لاكتشاف التطبيقات والملفات الرقمية بسهولة.">
+  <meta name="description" content="HyperSoft Store — متجر التطبيقات والألعاب الرقمية، اكتشف وحمّل بروابط مباشرة وآمنة.">
   <title>Store | متجرك الرقمي</title>
   <link rel="icon" href="/Logo.png">
   <link rel="stylesheet" href="/styles.css?v=0.0.5">
@@ -13,60 +13,265 @@
 <body>
   <header class="site-header">
     <div class="header-inner">
+      <button class="menu-toggle" id="menu-toggle" type="button" aria-label="فتح القائمة الرئيسية" aria-controls="sidebar" aria-expanded="false" title="القائمة الرئيسية">☰</button>
       <a class="brand" href="/" aria-label="الصفحة الرئيسية">
         <img id="store-logo" src="/Logo.png" alt="" onerror="if(!this.dataset.fallback){this.dataset.fallback='1';this.src='/Logo.svg'}else{this.hidden=true}">
         <span id="store-name">Store</span>
       </a>
+      <nav class="desktop-nav" aria-label="أقسام المتجر">
+        <button class="store-nav-link active" data-store-tab="" type="button">الرئيسية</button>
+        <button class="store-nav-link" data-store-tab="apps" type="button">التطبيقات</button>
+        <button class="store-nav-link" data-store-tab="games" type="button">الألعاب</button>
+        <button class="store-nav-link" data-store-tab="categories" type="button">التصنيفات</button>
+        <button class="store-nav-link" data-store-tab="featured" type="button">المميّزة</button>
+        <button class="store-nav-link" data-store-tab="top" type="button">الأكثر تحميلاً</button>
+      </nav>
       <form class="search-form" id="search-form" role="search">
         <span aria-hidden="true">⌕</span>
-        <input id="search-input" type="search" placeholder="دوّر على تطبيق أو ملف..." aria-label="البحث" autocomplete="off">
+        <input id="search-input" type="search" placeholder="دوّر على تطبيق أو لعبة..." aria-label="البحث" autocomplete="off">
         <button type="submit">بحث</button>
       </form>
-      <button class="menu-toggle" id="menu-toggle" type="button" aria-label="فتح القائمة الرئيسية" aria-controls="sidebar" aria-expanded="false" title="القائمة الرئيسية">☰</button>
     </div>
   </header>
 
   <div class="layout">
     <aside class="sidebar" id="sidebar" aria-label="التنقل">
+      <div class="sidebar-header">
+        <div class="sidebar-brand">
+          <div class="brand-mark-mini">S</div>
+          <div>
+            <strong>HyperSoft Store</strong>
+            <small>متجر التطبيقات والألعاب</small>
+          </div>
+        </div>
+        <button class="sidebar-close" id="sidebar-close" type="button" aria-label="إغلاق القائمة">×</button>
+      </div>
       <div class="sidebar-heading">تصفّح المتجر</div>
-      <button class="nav-item active" data-category="" type="button"><span>⌂</span> الرئيسية</button>
-      <div class="sidebar-heading categories-heading">الأقسام</div>
+      <button class="nav-item active" data-category="" data-nav="home" type="button"><span>⌂</span> الرئيسية</button>
+      <button class="nav-item" data-nav="apps" type="button"><span>📱</span> التطبيقات</button>
+      <button class="nav-item" data-nav="games" type="button"><span>🎮</span> الألعاب</button>
+      <button class="nav-item" data-nav="categories" type="button"><span>📂</span> كل التصنيفات</button>
+      <button class="nav-item" data-nav="featured" type="button"><span>⭐</span> المنتجات المميّزة</button>
+      <button class="nav-item" data-nav="top" type="button"><span>🔥</span> الأكثر تحميلاً</button>
+      <button class="nav-item" data-nav="posts" type="button"><span>📰</span> مقالات ومشاركات</button>
+      <div class="sidebar-heading categories-heading">الأقسام المتاحة</div>
       <div id="category-list" class="category-list"><p class="muted small">دا نحمل الأقسام...</p></div>
-      <div class="sidebar-note"><strong>أهلاً بيك 👋</strong><p>كلشي تحتاجه، بمكان واحد.</p></div>
+      <div class="sidebar-note"><strong>أهلاً بيك 👋</strong><p>تطبيقات وألعاب آمنة بروابط مباشرة وتحديثات مستمرة.</p></div>
     </aside>
 
     <main class="main-content">
-      <section class="hero">
-        <div class="hero-copy">
-          <span class="eyebrow">متجرك الرقمي</span>
-          <h1>لكلشي تدور عليه، <span>تلكاه هنا.</span></h1>
-          <p>اكتشف التطبيقات والملفات الرقمية بسهولة، وبواجهة مرتبة وسريعة.</p>
-          <a class="hero-button" href="#catalog">تصفّح المنتجات <span>←</span></a>
+      <!-- Standard Storefront Main Section -->
+      <div id="store-main-view">
+        <section class="hero" id="hero-banner">
+          <div class="hero-copy">
+            <span class="eyebrow">HyperSoft Store · المتجر الرقمي الحديث</span>
+            <h1>لكل تطبيق أو لعبة تدور عليها، <span>تلكاها هنا.</span></h1>
+            <p>اكتشف أفضل التطبيقات والألعاب بروابط تنزيل مباشرة، آمنة وسريعة، وبواجهة عربية أنيقة ومتجاوبة.</p>
+            <div class="hero-actions">
+              <a class="hero-button" href="#catalog">تصفّح المنتجات <span>←</span></a>
+              <button class="hero-pill-btn" data-store-tab="apps" type="button">📱 التطبيقات</button>
+              <button class="hero-pill-btn" data-store-tab="games" type="button">🎮 الألعاب</button>
+            </div>
+          </div>
+          <div class="hero-art" aria-hidden="true">
+            <div class="art-orbit orbit-one"></div>
+            <div class="art-orbit orbit-two"></div>
+            <div class="art-tile">S<span>✦</span></div>
+            <div class="art-dot dot-one"></div>
+            <div class="art-dot dot-two"></div>
+          </div>
+        </section>
+
+        <!-- Quick Filter Badges Bar -->
+        <nav class="quick-chips-bar" aria-label="تصفية سريعة">
+          <button class="chip-item active" data-filter-type="" type="button">✨ الكل</button>
+          <button class="chip-item" data-filter-type="app" type="button">📱 تطبيقات فقط</button>
+          <button class="chip-item" data-filter-type="game" type="button">🎮 ألعاب فقط</button>
+          <button class="chip-item" data-filter-sort="downloads" type="button">🔥 الأكثر تحميلاً</button>
+          <button class="chip-item" data-filter-sort="rating" type="button">⭐ الأعلى تقييماً</button>
+        </nav>
+
+        <!-- Featured Showcase Section -->
+        <section class="section showcase-section" id="featured-section" hidden>
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">مختارات المحرّر</span>
+              <h2>التطبيقات والألعاب المميّزة</h2>
+              <p>محتوى تم اختياره بعناية لتقديم تجربة ممتازة.</p>
+            </div>
+            <button class="section-view-all" data-view-more="featured" type="button">عرض المزيد <span>←</span></button>
+          </div>
+          <div id="featured-grid" class="product-grid horizontal-scroll" aria-live="polite"></div>
+        </section>
+
+        <!-- Latest Apps Showcase Section -->
+        <section class="section showcase-section" id="apps-section" hidden>
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">أدوات وإنتاجية</span>
+              <h2>أحدث التطبيقات</h2>
+              <p>تطبيقات جديدة تم نشرها مؤخراً.</p>
+            </div>
+            <button class="section-view-all" data-view-more="apps" type="button">عرض كل التطبيقات <span>←</span></button>
+          </div>
+          <div id="apps-grid" class="product-grid" aria-live="polite"></div>
+        </section>
+
+        <!-- Latest Games Showcase Section -->
+        <section class="section showcase-section" id="games-section" hidden>
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">تسلية ومغامرات</span>
+              <h2>أحدث الألعاب</h2>
+              <p>ألعاب متنوعة وممتعة وجاهزة للتحميل.</p>
+            </div>
+            <button class="section-view-all" data-view-more="games" type="button">عرض كل الألعاب <span>←</span></button>
+          </div>
+          <div id="games-grid" class="product-grid" aria-live="polite"></div>
+        </section>
+
+        <!-- Top Downloaded Showcase Section -->
+        <section class="section showcase-section" id="downloads-section" hidden>
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">الشائعة بين المستخدمين</span>
+              <h2>الأكثر تحميلاً</h2>
+              <p>المنتجات التي حققت أعلى نسب تنزيل حقيقية في المتجر.</p>
+            </div>
+            <button class="section-view-all" data-view-more="top" type="button">عرض الكل <span>←</span></button>
+          </div>
+          <div id="downloads-grid" class="product-grid" aria-live="polite"></div>
+        </section>
+
+        <!-- Categories Cards Showcase -->
+        <section class="section" id="categories-preview-section">
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">استكشف حسب القسم</span>
+              <h2>الأقسام والتصنيفات</h2>
+              <p>تصفح التطبيقات والألعاب حسب فئتها وتخصصها.</p>
+            </div>
+            <button class="section-view-all" id="view-all-categories-btn" type="button">كل الأقسام <span>←</span></button>
+          </div>
+          <div id="categories-preview-grid" class="categories-cards-grid"></div>
+        </section>
+
+        <!-- General Catalog / Search Results Section -->
+        <section class="section" id="catalog">
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">الكتالوج الشامل</span>
+              <h2 id="catalog-title">أحدث المنتجات</h2>
+              <p id="catalog-subtitle">منتجات مختارة حتى تكتشف الجديد.</p>
+            </div>
+            <div class="result-count" id="result-count">دا نحمل المنتجات...</div>
+          </div>
+          <div id="status-message" class="status-message" hidden></div>
+          <div id="product-grid" class="product-grid" aria-live="polite"><div class="loading-card"></div><div class="loading-card"></div><div class="loading-card"></div><div class="loading-card"></div></div>
+          <div class="load-more-wrap"><button id="load-more" class="load-more" type="button" hidden>عرض المزيد</button></div>
+        </section>
+
+        <!-- Articles / Posts Section -->
+        <section class="section posts-section" id="posts-section">
+          <div class="section-heading">
+            <div>
+              <span class="eyebrow">أخبار ومقالات</span>
+              <h2>آخر المشاركات</h2>
+              <p>شروحات وأخبار وتحديثات منشورة للزوار.</p>
+            </div>
+            <span class="result-count" id="posts-count">دا نحمل المشاركات...</span>
+          </div>
+          <div id="posts-grid" class="posts-grid" aria-live="polite"><div class="loading-card"></div><div class="loading-card"></div></div>
+          <div id="posts-status" class="status-message" hidden></div>
+        </section>
+
+        <!-- Empty State Screen -->
+        <section class="empty-state" id="empty-state" hidden>
+          <div class="empty-icon">⌕</div>
+          <h2>ما لكينا نتائج مطابقة</h2>
+          <p>جرّب كلمة بحث ثانية أو اختار قسماً مختلفاً من القائمة.</p>
+          <button id="clear-filters" class="secondary-button" type="button">عرض كل المنتجات</button>
+        </section>
+      </div>
+
+      <!-- Dedicated Category View (When viewing a specific category or all categories) -->
+      <section id="category-dedicated-view" class="category-dedicated-view" hidden>
+        <div class="category-header-banner">
+          <button class="back-link-btn" id="category-back-btn" type="button"><span>←</span> العودة للرئيسية</button>
+          <div class="category-hero-body">
+            <div class="category-icon-box" id="cat-view-icon">◈</div>
+            <div>
+              <span class="eyebrow" id="cat-view-eyebrow">قسم في المتجر</span>
+              <h1 id="cat-view-title">اسم القسم</h1>
+              <p id="cat-view-desc">وصف القسم وتفاصيله.</p>
+              <div class="category-stats-chip" id="cat-view-count">0 منتج منشور</div>
+            </div>
+          </div>
+          <div class="category-toolbar">
+            <div class="cat-filter-tabs">
+              <button class="cat-tab-btn active" data-cat-type="" type="button">الكل</button>
+              <button class="cat-tab-btn" data-cat-type="app" type="button">تطبيقات</button>
+              <button class="cat-tab-btn" data-cat-type="game" type="button">ألعاب</button>
+            </div>
+            <select class="cat-sort-select" id="cat-sort-select" aria-label="ترتيب النتائج">
+              <option value="newest">الأحدث أولاً</option>
+              <option value="downloads">الأكثر تحميلاً</option>
+              <option value="rating">الأعلى تقييماً</option>
+            </select>
+          </div>
         </div>
-        <div class="hero-art" aria-hidden="true"><div class="art-orbit orbit-one"></div><div class="art-orbit orbit-two"></div><div class="art-tile">S<span>✦</span></div><div class="art-dot dot-one"></div><div class="art-dot dot-two"></div></div>
+        <div id="category-status-message" class="status-message" hidden></div>
+        <div id="category-products-grid" class="product-grid" aria-live="polite"></div>
+        <div class="load-more-wrap"><button id="cat-load-more" class="load-more" type="button" hidden>عرض المزيد</button></div>
       </section>
 
-      <section class="section" id="catalog">
-        <div class="section-heading">
-          <div><span class="eyebrow">اختياراتنا إلك</span><h2 id="catalog-title">أحدث المنتجات</h2><p id="catalog-subtitle">منتجات مختارة حتى تكتشف الجديد.</p></div>
-          <div class="result-count" id="result-count">دا نحمل المنتجات...</div>
+      <!-- All Categories Dedicated View -->
+      <section id="all-categories-view" class="all-categories-view" hidden>
+        <div class="category-header-banner">
+          <button class="back-link-btn" id="all-cats-back-btn" type="button"><span>←</span> العودة للرئيسية</button>
+          <div>
+            <span class="eyebrow">دليل الكتالوج</span>
+            <h1>جميع تصنيفات المتجر</h1>
+            <p>استكشف التطبيقات والألعاب المنظمة حسب الفئات والأقسام المعتمدة.</p>
+          </div>
         </div>
-        <div id="status-message" class="status-message" hidden></div>
-        <div id="product-grid" class="product-grid" aria-live="polite"><div class="loading-card"></div><div class="loading-card"></div><div class="loading-card"></div><div class="loading-card"></div></div>
-        <div class="load-more-wrap"><button id="load-more" class="load-more" type="button" hidden>عرض المزيد</button></div>
+        <div id="all-categories-grid" class="categories-full-grid"></div>
       </section>
 
-      <section class="section posts-section" id="posts-section">
-        <div class="section-heading"><div><span class="eyebrow">منشورات المتجر</span><h2>آخر المشاركات</h2><p>مقالات وشروحات وأخبار منشورة من إدارة المتجر.</p></div><span class="result-count" id="posts-count">دا نحمل المشاركات...</span></div>
-        <div id="posts-grid" class="posts-grid" aria-live="polite"><div class="loading-card"></div><div class="loading-card"></div></div>
-        <div id="posts-status" class="status-message" hidden></div>
-      </section>
-
-      <section class="empty-state" id="empty-state" hidden><div class="empty-icon">⌕</div><h2>ما لكينا نتائج</h2><p>جرّب كلمة بحث ثانية أو اختار قسم مختلف.</p><button id="clear-filters" class="secondary-button" type="button">عرض كل المنتجات</button></section>
-
-      <footer class="site-footer"><div class="footer-brand"><span class="footer-mark">S</span><div><strong id="footer-name">Store</strong><p>متجرك الرقمي، بلهجتنا.</p></div></div><p>© <span id="year"></span> <span id="footer-name-copy">Store</span>. جميع الحقوق محفوظة.</p></footer>
+      <footer class="site-footer">
+        <div class="footer-brand">
+          <span class="footer-mark">S</span>
+          <div>
+            <strong id="footer-name">Store</strong>
+            <p>متجرك الرقمي للتطبيقات والألعاب العربية والعالمية.</p>
+          </div>
+        </div>
+        <div class="footer-links">
+          <button class="footer-link-btn" data-nav="home" type="button">الرئيسية</button>
+          <button class="footer-link-btn" data-nav="apps" type="button">التطبيقات</button>
+          <button class="footer-link-btn" data-nav="games" type="button">الألعاب</button>
+          <button class="footer-link-btn" data-nav="categories" type="button">التصنيفات</button>
+        </div>
+        <p>© <span id="year"></span> <span id="footer-name-copy">Store</span>. جميع الحقوق محفوظة.</p>
+      </footer>
     </main>
   </div>
+
+  <!-- Dedicated Product Dialog / Standalone View -->
+  <dialog class="product-dialog" id="product-dialog">
+    <button class="dialog-close" type="button" aria-label="إغلاق">×</button>
+    <div id="product-dialog-content"></div>
+  </dialog>
+
+  <!-- Screenshot Lightbox Modal -->
+  <div class="screenshot-lightbox" id="screenshot-lightbox" hidden>
+    <div class="lightbox-backdrop" id="lightbox-backdrop"></div>
+    <div class="lightbox-container">
+      <button class="lightbox-close" id="lightbox-close" type="button" aria-label="إغلاق المعاينة">×</button>
+      <img id="lightbox-img" src="" alt="معاينة لقطة الشاشة">
+    </div>
+  </div>
+
   <div class="mobile-overlay" id="mobile-overlay" hidden></div>
 </body>
 </html>

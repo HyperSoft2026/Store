@@ -6,6 +6,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "build": "npm run check",
     "check": "node --check server.js && node --check public/app.js && node --check public/admin-utils.js && node --check public/admin-assets.js && node --check scripts/smoke-test.js && node --check scripts/admin-utils-test.js && node --check scripts/integration-test.js && node --check scripts/backup-db.js && node --check scripts/restore-db.js && node --check scripts/ui-contract-test.js && node --check scripts/browser-test.js",
     "test": "node scripts/admin-utils-test.js && node scripts/ui-contract-test.js && node scripts/smoke-test.js && node scripts/integration-test.js && node scripts/browser-test.js"
   },

@@ -107,47 +107,175 @@ async function loadProducts() {
 }
 function renderProducts() {
   const q = ($('#product-search').value || '').toLowerCase();
-  const items = adminData.products.filter(p => [p.name,p.slug,p.developer,p.categoryName].some(v => String(v || '').toLowerCase().includes(q)));
-  $('#products-table').innerHTML = items.length ? items.map(p => '<tr><td><strong>' + esc(p.name) + '</strong><br><small>/' + esc(p.slug) + '</small></td><td>' + esc(p.categoryName || 'بدون قسم') + '</td><td><span class="status-pill ' + (p.published ? 'published' : 'draft') + '">' + (p.published ? 'منشور' : 'مسودة') + '</span></td><td>' + esc(p.downloads || 0) + '</td><td><div class="row-actions"><button data-product-edit="' + esc(p.id) + '">تعديل</button><button class="delete-btn" data-product-delete="' + esc(p.id) + '">حذف</button></div></td></tr>').join('') : '<tr><td colspan="5" class="empty-cell">ماكو منتجات مطابقة.</td></tr>';
+  const typeFilter = ($('#product-type-filter')?.value || 'all');
+  const statusFilter = ($('#product-status-filter')?.value || 'all');
+  const items = adminData.products.filter(p => {
+    if (typeFilter !== 'all' && (p.type || 'app') !== typeFilter) return false;
+    if (statusFilter === 'published' && !p.published) return false;
+    if (statusFilter === 'draft' && p.published) return false;
+    if (!q) return true;
+    return [p.name, p.slug, p.developer, p.categoryName].some(v => String(v || '').toLowerCase().includes(q));
+  });
+  $('#products-table').innerHTML = items.length ? items.map(p => {
+    const isGame = p.type === 'game';
+    const typeLabel = isGame ? '🎮 لعبة' : '📱 تطبيق';
+    const statusLabel = p.published ? 'منشور' : 'مسودة';
+    const statusClass = p.published ? 'published' : 'draft';
+    return '<tr><td><strong>' + esc(p.name) + '</strong>' + (p.featured ? ' <span class="product-badge" style="font-size:9px;padding:2px 5px">مميّز</span>' : '') + '<br><small>/' + esc(p.slug) + '</small></td>' +
+      '<td>' + typeLabel + '</td>' +
+      '<td>' + esc(p.categoryName || 'بدون قسم') + '</td>' +
+      '<td><span class="status-pill ' + statusClass + '">' + statusLabel + '</span></td>' +
+      '<td>' + esc(p.downloads || 0) + '</td>' +
+      '<td><div class="row-actions">' +
+        '<button data-product-edit="' + esc(p.id) + '">تعديل</button>' +
+        '<button class="secondary-btn" data-product-toggle="' + esc(p.id) + '" title="تبديل حالة النشر">' + (p.published ? 'إلغاء النشر' : 'نشر') + '</button>' +
+        '<button class="delete-btn" data-product-delete="' + esc(p.id) + '">حذف</button>' +
+      '</div></td></tr>';
+  }).join('') : '<tr><td colspan="6" class="empty-cell">ماكو منتجات مطابقة.</td></tr>';
 }
 function resetProductForm() {
-  $('#product-form').reset(); $('#product-id').value = ''; $('#product-editor-title').textContent = 'إضافة منتج';
-  $('#product-editor-notice').hidden = true; $('#product-save').disabled = false;
+  $('#product-form').reset();
+  $('#product-id').value = '';
+  if ($('#product-type')) $('#product-type').value = 'app';
+  if ($('#product-platform')) $('#product-platform').value = 'Android';
+  if ($('#product-screenshots')) $('#product-screenshots').value = '';
+  if ($('#product-release-notes')) $('#product-release-notes').value = '';
+  $('#product-editor-title').textContent = 'إضافة منتج';
+  $('#product-editor-notice').hidden = true;
+  $('#product-save').disabled = false;
 }
 function editProduct(p) {
-  $('#product-id').value = p.id; $('#product-name').value = p.name || ''; $('#product-slug').value = p.slug || '';
-  $('#product-category').value = p.categoryId || ''; $('#product-developer').value = p.developer || '';
-  $('#product-short').value = p.shortDescription || ''; $('#product-description').value = p.description || '';
-  $('#product-image').value = p.imageUrl || ''; $('#product-download').value = p.downloadUrl || '';
-  $('#product-version').value = p.version || ''; $('#product-size').value = p.fileSize || '';
+  $('#product-id').value = p.id;
+  $('#product-name').value = p.name || '';
+  $('#product-slug').value = p.slug || '';
+  if ($('#product-type')) $('#product-type').value = p.type || 'app';
+  $('#product-category').value = p.categoryId || '';
+  $('#product-developer').value = p.developer || '';
+  if ($('#product-platform')) $('#product-platform').value = p.platform || 'Android';
+  $('#product-short').value = p.shortDescription || '';
+  $('#product-description').value = p.description || '';
+  $('#product-image').value = p.imageUrl || '';
+  $('#product-download').value = p.downloadUrl || '';
+  $('#product-version').value = p.version || '';
+  $('#product-size').value = p.fileSize || '';
   $('#product-rating').value = p.rating == null ? '' : p.rating;
-  $('#product-featured').checked = !!p.featured; $('#product-published').checked = !!p.published;
-  $('#product-editor-title').textContent = 'تعديل المنتج'; $('#product-editor-notice').hidden = true;
-  setAdminView('products'); $('#product-name').focus();
+  if ($('#product-screenshots')) {
+    let shots = '';
+    if (Array.isArray(p.screenshots)) shots = p.screenshots.join('\n');
+    else if (typeof p.screenshots === 'string') {
+      try { const arr = JSON.parse(p.screenshots); shots = Array.isArray(arr) ? arr.join('\n') : p.screenshots; } catch { shots = p.screenshots; }
+    }
+    $('#product-screenshots').value = shots;
+  }
+  if ($('#product-release-notes')) $('#product-release-notes').value = p.releaseNotes || '';
+  $('#product-featured').checked = !!p.featured;
+  $('#product-published').checked = !!p.published;
+  $('#product-editor-title').textContent = 'تعديل المنتج';
+  $('#product-editor-notice').hidden = true;
+  setAdminView('products');
+  $('#product-name').focus();
 }
 $('#new-product').addEventListener('click', () => { resetProductForm(); $('#product-name').focus(); });
 $('#product-cancel').addEventListener('click', resetProductForm);
 $('#product-name').addEventListener('input', () => { if (!$('#product-id').value && !$('#product-slug').dataset.edited) $('#product-slug').value = slugify($('#product-name').value); });
 $('#product-slug').addEventListener('input', () => { $('#product-slug').dataset.edited = '1'; });
 $('#product-search').addEventListener('input', renderProducts);
+$('#product-type-filter')?.addEventListener('change', renderProducts);
+$('#product-status-filter')?.addEventListener('change', renderProducts);
 $('#product-form').addEventListener('submit', async e => {
-  e.preventDefault(); const id = $('#product-id').value;
-  const p = { name: $('#product-name').value, slug: $('#product-slug').value, categoryId: $('#product-category').value || null,
-    developer: $('#product-developer').value, shortDescription: $('#product-short').value, description: $('#product-description').value,
-    imageUrl: $('#product-image').value, downloadUrl: $('#product-download').value, version: $('#product-version').value,
-    fileSize: $('#product-size').value, rating: $('#product-rating').value === '' ? null : Number($('#product-rating').value),
-    featured: $('#product-featured').checked, published: $('#product-published').checked };
-  const b = $('#product-save'); b.disabled = true; b.textContent = 'دا نحفظ...';
-  try { await api(id ? '/api/admin/products/' + encodeURIComponent(id) : '/api/admin/products', { method: id ? 'PUT' : 'POST', body: JSON.stringify(p) }); resetProductForm(); await loadProducts(); notice('#products-notice', 'تم حفظ المنتج.'); }
-  catch (err) { notice('#product-editor-notice', err.message); }
-  finally { b.disabled = false; b.textContent = 'حفظ المنتج'; }
+  e.preventDefault();
+  const id = $('#product-id').value;
+  const p = {
+    name: $('#product-name').value,
+    slug: $('#product-slug').value,
+    type: $('#product-type') ? $('#product-type').value : 'app',
+    categoryId: $('#product-category').value || null,
+    developer: $('#product-developer').value,
+    platform: $('#product-platform') ? $('#product-platform').value : 'Android',
+    shortDescription: $('#product-short').value,
+    description: $('#product-description').value,
+    imageUrl: $('#product-image').value,
+    downloadUrl: $('#product-download').value,
+    version: $('#product-version').value,
+    fileSize: $('#product-size').value,
+    rating: $('#product-rating').value === '' ? null : Number($('#product-rating').value),
+    screenshots: $('#product-screenshots') ? $('#product-screenshots').value : '',
+    releaseNotes: $('#product-release-notes') ? $('#product-release-notes').value : '',
+    featured: $('#product-featured').checked,
+    published: $('#product-published').checked
+  };
+  const b = $('#product-save');
+  b.disabled = true;
+  b.textContent = 'دا نحفظ...';
+  try {
+    await api(id ? '/api/admin/products/' + encodeURIComponent(id) : '/api/admin/products', {
+      method: id ? 'PUT' : 'POST',
+      body: JSON.stringify(p)
+    });
+    resetProductForm();
+    await loadProducts();
+    notice('#products-notice', 'تم حفظ المنتج.');
+  } catch (err) {
+    notice('#product-editor-notice', err.message);
+  } finally {
+    b.disabled = false;
+    b.textContent = 'حفظ المنتج';
+  }
 });
 $('#products-table').addEventListener('click', async e => {
   const edit = e.target.closest('[data-product-edit]');
-  if (edit) { const p = adminData.products.find(x => String(x.id) === edit.dataset.productEdit); if (p) editProduct(p); return; }
+  if (edit) {
+    const p = adminData.products.find(x => String(x.id) === edit.dataset.productEdit);
+    if (p) editProduct(p);
+    return;
+  }
+  const toggle = e.target.closest('[data-product-toggle]');
+  if (toggle) {
+    const p = adminData.products.find(x => String(x.id) === toggle.dataset.productToggle);
+    if (!p) return;
+    const nextPublished = !p.published;
+    try {
+      await api('/api/admin/products/' + encodeURIComponent(p.id), {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: p.name,
+          slug: p.slug,
+          type: p.type || 'app',
+          categoryId: p.categoryId,
+          developer: p.developer,
+          platform: p.platform || 'Android',
+          shortDescription: p.shortDescription,
+          description: p.description,
+          imageUrl: p.imageUrl,
+          downloadUrl: p.downloadUrl,
+          version: p.version,
+          fileSize: p.fileSize,
+          rating: p.rating,
+          screenshots: p.screenshots,
+          releaseNotes: p.releaseNotes,
+          featured: p.featured,
+          published: nextPublished
+        })
+      });
+      await loadProducts();
+      notice('#products-notice', nextPublished ? 'تم نشر المنتج بنجاح.' : 'تم إلغاء نشر المنتج.');
+    } catch (err) {
+      notice('#products-notice', err.message);
+    }
+    return;
+  }
   const del = e.target.closest('[data-product-delete]');
-  if (del) { const p = adminData.products.find(x => String(x.id) === del.dataset.productDelete); if (!p || !confirm('متأكد تريد حذف المنتج «' + p.name + '»؟')) return;
-    try { await api('/api/admin/products/' + encodeURIComponent(p.id), { method: 'DELETE' }); await loadProducts(); } catch (err) { notice('#products-notice', err.message); } }
+  if (del) {
+    const p = adminData.products.find(x => String(x.id) === del.dataset.productDelete);
+    if (!p || !confirm('متأكد تريد حذف المنتج «' + p.name + '»؟')) return;
+    try {
+      await api('/api/admin/products/' + encodeURIComponent(p.id), { method: 'DELETE' });
+      await loadProducts();
+      notice('#products-notice', 'تم حذف المنتج.');
+    } catch (err) {
+      notice('#products-notice', err.message);
+    }
+  }
 });
 function resetCategoryForm() { $('#category-form').reset(); $('#category-id').value = ''; $('#category-editor-title').textContent = 'إضافة قسم'; $('#category-notice').hidden = true; }
 $('#category-name').addEventListener('input', () => { if (!$('#category-id').value && !$('#category-slug').dataset.edited) $('#category-slug').value = slugify($('#category-name').value); });

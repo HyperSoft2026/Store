@@ -35,15 +35,31 @@
     <header class="topbar"><div><span class="eyebrow">لوحة التحكم / المحتوى</span><h1>المشاركات</h1></div><button class="primary-btn new-post" id="new-post" type="button">＋ مشاركة جديدة</button></header>
 
     <section id="products-view" hidden>
-      <header class="topbar"><div><span class="eyebrow">لوحة التحكم / الكتالوج</span><h1>المنتجات</h1></div><button class="primary-btn" id="new-product" type="button">＋ منتج جديد</button></header>
-      <section class="content-panel"><div class="panel-heading"><div><h2>كتالوج المنتجات</h2><p>إدارة المنتجات وروابط التنزيل وحالة النشر.</p></div><label class="search-box"><span>⌕</span><input id="product-search" type="search" placeholder="ابحث عن منتج..."></label></div><div id="products-notice" class="notice" role="status" hidden></div><div class="table-wrap"><table><thead><tr><th>المنتج</th><th>القسم</th><th>الحالة</th><th>التنزيلات</th><th>إجراءات</th></tr></thead><tbody id="products-table"><tr><td colspan="5" class="empty-cell">دا نحمل المنتجات...</td></tr></tbody></table></div></section>
+      <header class="topbar"><div><span class="eyebrow">لوحة التحكم / الكتالوج</span><h1>إدارة التطبيقات والألعاب</h1></div><button class="primary-btn" id="new-product" type="button">＋ إضافة تطبيق أو لعبة</button></header>
+      <section class="content-panel"><div class="panel-heading"><div><h2>كتالوج المنتجات المنشورة والمسودات</h2><p>إدارة التطبيقات والألعاب وروابط التنزيل المباشرة وحالة النشر والتمييز.</p></div>
+        <div class="tools">
+          <label class="search-box"><span>⌕</span><input id="product-search" type="search" placeholder="ابحث عن تطبيق أو لعبة..."></label>
+          <select id="product-type-filter" aria-label="تصفية حسب النوع"><option value="all">كل الأنواع</option><option value="app">تطبيقات</option><option value="game">ألعاب</option></select>
+          <select id="product-status-filter" aria-label="تصفية حسب الحالة"><option value="all">كل الحالات</option><option value="published">منشورة</option><option value="draft">مسودات</option></select>
+        </div>
+      </div><div id="products-notice" class="notice" role="status" hidden></div><div class="table-wrap"><table><thead><tr><th>المنتج</th><th>النوع</th><th>القسم</th><th>الحالة</th><th>التنزيلات</th><th>إجراءات</th></tr></thead><tbody id="products-table"><tr><td colspan="6" class="empty-cell">دا نحمل المنتجات...</td></tr></tbody></table></div></section>
       <section class="content-panel" style="margin-top:18px;padding:20px"><h2 id="product-editor-title">إضافة منتج</h2><form id="product-form"><input id="product-id" type="hidden"><div class="form-grid">
-      <div class="field"><label for="product-name">اسم المنتج *</label><input id="product-name" required maxlength="180"></div><div class="field"><label for="product-slug">الرابط المميز</label><input id="product-slug" maxlength="180" required></div>
-      <div class="field"><label for="product-category">القسم</label><select id="product-category"><option value="">بدون قسم</option></select></div><div class="field"><label for="product-developer">المطوّر</label><input id="product-developer" maxlength="180"></div>
-      <div class="field full"><label for="product-short">وصف مختصر</label><input id="product-short" maxlength="500"></div><div class="field full"><label for="product-description">الوصف</label><textarea id="product-description" rows="4" maxlength="20000"></textarea></div>
-      <div class="field"><label for="product-image">رابط الصورة</label><input id="product-image" maxlength="1500" placeholder="https://... أو /image.png"></div><div class="field"><label for="product-download">رابط التنزيل</label><input id="product-download" maxlength="2000" placeholder="https://..."></div>
-      <div class="field"><label for="product-version">الإصدار</label><input id="product-version" maxlength="80"></div><div class="field"><label for="product-size">حجم الملف</label><input id="product-size" maxlength="80"></div><div class="field"><label for="product-rating">التقييم (من 0 إلى 5)</label><input id="product-rating" type="number" min="0" max="5" step="0.1" placeholder="اتركه فارغاً إذا لا يوجد تقييم"></div>
-      <div class="field"><label><input id="product-featured" type="checkbox"> منتج مميّز</label></div><div class="field"><label><input id="product-published" type="checkbox"> منشور للزوار</label></div>
+      <div class="field"><label for="product-name">اسم المنتج *</label><input id="product-name" required maxlength="180" placeholder="مثلاً: WhatsApp أو Minecraft"></div><div class="field"><label for="product-slug">الرابط المميز *</label><input id="product-slug" maxlength="180" required placeholder="يُنشأ تلقائياً من الاسم"></div>
+      <div class="field"><label for="product-type">نوع المنتج *</label><select id="product-type"><option value="app">تطبيق (Application)</option><option value="game">لعبة (Game)</option></select></div>
+      <div class="field"><label for="product-category">القسم</label><select id="product-category"><option value="">بدون قسم</option></select></div>
+      <div class="field"><label for="product-developer">المطوّر أو الناشر</label><input id="product-developer" maxlength="180" placeholder="مثلاً: Mojang أو Meta"></div>
+      <div class="field"><label for="product-platform">نظام التشغيل / المنصة</label><input id="product-platform" maxlength="50" placeholder="مثلاً: Android 8.0+ أو Universal"></div>
+      <div class="field full"><label for="product-short">وصف مختصر</label><input id="product-short" maxlength="500" placeholder="نبذة سريعة تظهر في البطاقات وقوائم البحث"></div>
+      <div class="field full"><label for="product-description">الوصف الكامل والمميزات</label><textarea id="product-description" rows="5" maxlength="20000" placeholder="اكتب وصفاً مفصلاً للتطبيق أو اللعبة ومميزاته..."></textarea></div>
+      <div class="field"><label for="product-image">رابط أيقونة المنتج (Square icon)</label><input id="product-image" maxlength="1500" placeholder="https://... أو /image.png"></div>
+      <div class="field"><label for="product-download">رابط التنزيل المباشر</label><input id="product-download" maxlength="2000" placeholder="https://... ملف APK أو الرابط الآمن"></div>
+      <div class="field"><label for="product-version">الإصدار</label><input id="product-version" maxlength="80" placeholder="مثلاً: v1.20.50"></div>
+      <div class="field"><label for="product-size">حجم الملف</label><input id="product-size" maxlength="80" placeholder="مثلاً: 45 MB أو 1.2 GB"></div>
+      <div class="field"><label for="product-rating">التقييم (من 0 إلى 5)</label><input id="product-rating" type="number" min="0" max="5" step="0.1" placeholder="اتركه فارغاً إذا لا يوجد تقييم"></div>
+      <div class="field full"><label for="product-screenshots">لقطات الشاشة (روابط الصور)</label><textarea id="product-screenshots" rows="2" maxlength="5000" placeholder="اكتب روابط لقطات الشاشة هنا (كل رابط بسطر جديد أو مفصولة بفواصل)"></textarea><small>تظهر لقطات الشاشة في معرض تفاصيل المنتج لمساعدة الزوار في معاينة التطبيق أو اللعبة قبل التحميل.</small></div>
+      <div class="field full"><label for="product-release-notes">ملاحظات التحديث (ما الجديد في هذا الإصدار)</label><textarea id="product-release-notes" rows="2" maxlength="5000" placeholder="اكتب التغييرات أو المميزات الجديدة في هذا الإصدار..."></textarea></div>
+      <div class="field"><label><input id="product-featured" type="checkbox"> منتج مميّز (يظهر في قسم المميزة في المتجر)</label></div>
+      <div class="field"><label><input id="product-published" type="checkbox"> منشور للزوار (ظاهر في المتجر العام)</label></div>
       </div><p class="notice" id="product-editor-notice" role="alert" hidden></p><footer class="editor-actions"><button class="secondary-btn" id="product-cancel" type="button">إلغاء التعديل</button><button class="primary-btn" id="product-save" type="submit">حفظ المنتج</button></footer></form></section>
     </section>
     <section id="categories-view" hidden>

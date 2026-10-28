@@ -164,6 +164,11 @@ async function initializeDatabase() {
       )
     `);
     await client.query('ALTER TABLE store_products ADD COLUMN IF NOT EXISTS rating NUMERIC(2,1) CHECK (rating IS NULL OR (rating >= 0 AND rating <= 5))');
+    await client.query("ALTER TABLE store_products ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'app' CHECK (type IN ('app','game'))");
+    await client.query("ALTER TABLE store_products ADD COLUMN IF NOT EXISTS screenshots TEXT NOT NULL DEFAULT '[]'");
+    await client.query("ALTER TABLE store_products ADD COLUMN IF NOT EXISTS platform TEXT NOT NULL DEFAULT 'Android'");
+    await client.query("ALTER TABLE store_products ADD COLUMN IF NOT EXISTS release_notes TEXT NOT NULL DEFAULT ''");
+    await client.query("ALTER TABLE store_categories ADD COLUMN IF NOT EXISTS icon TEXT NOT NULL DEFAULT ''");
     await client.query('CREATE INDEX IF NOT EXISTS store_admin_sessions_expiry_idx ON store_admin_sessions (expires_at)');
     await client.query(`
       CREATE TABLE IF NOT EXISTS store_admin_attempts (
@@ -176,6 +181,8 @@ async function initializeDatabase() {
     await client.query('CREATE INDEX IF NOT EXISTS store_posts_public_idx ON store_posts (status, published_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS store_products_published_idx ON store_products (is_published, is_featured, created_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS store_products_category_idx ON store_products (category_id)');
+    await client.query('CREATE INDEX IF NOT EXISTS store_products_type_idx ON store_products (is_published, type, created_at DESC)');
+    await client.query('CREATE INDEX IF NOT EXISTS store_products_downloads_idx ON store_products (is_published, downloads DESC)');
     await client.query('COMMIT');
     databaseReady = true;
     databaseError = null;
@@ -199,16 +206,29 @@ function requireDatabase(req, res, next) {
   next();
 }
 
+function safeScreenshots(raw) {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.map(s => String(s || '').trim()).filter(Boolean);
+  } catch {}
+  return String(raw).split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+}
+
 function safeProduct(row) {
   return {
     id: row.id,
     name: row.name,
     slug: row.slug,
+    type: row.type === 'game' ? 'game' : 'app',
     category: row.category_name || '',
     categorySlug: row.category_slug || '',
     shortDescription: row.short_description,
     description: row.description,
     imageUrl: row.image_url,
+    screenshots: safeScreenshots(row.screenshots),
+    platform: row.platform || 'Android',
+    releaseNotes: row.release_notes || '',
     version: row.version,
     fileSize: row.file_size,
     developer: row.developer,
@@ -216,14 +236,16 @@ function safeProduct(row) {
     featured: row.is_featured,
     downloads: Number(row.downloads || 0),
     hasDownload: Boolean(row.download_url),
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    updatedAt: row.updated_at || row.created_at
   };
 }
 
 const PRODUCT_SELECT = `
   SELECT p.id, p.name, p.slug, p.short_description, p.description,
          p.image_url, p.version, p.file_size, p.developer, p.rating, p.is_featured,
-         p.downloads, p.download_url, p.created_at, c.name AS category_name, c.slug AS category_slug
+         p.downloads, p.download_url, p.type, p.screenshots, p.platform, p.release_notes,
+         p.created_at, p.updated_at, c.name AS category_name, c.slug AS category_slug
   FROM store_products p
   LEFT JOIN store_categories c ON c.id = p.category_id
 `;
@@ -255,7 +277,7 @@ app.get('/api/config', (req, res) => {
 app.get('/api/categories', requireDatabase, async (req, res, next) => {
   try {
     const result = await pool.query(`
-      SELECT c.id, c.name, c.slug, c.description, COUNT(p.id)::int AS product_count
+      SELECT c.id, c.name, c.slug, c.description, c.icon, COUNT(p.id)::int AS product_count
       FROM store_categories c
       LEFT JOIN store_products p ON p.category_id = c.id AND p.is_published = TRUE
       GROUP BY c.id
@@ -265,10 +287,29 @@ app.get('/api/categories', requireDatabase, async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+app.get('/api/categories/:slug', requireDatabase, async (req, res, next) => {
+  try {
+    const slug = String(req.params.slug).slice(0, 160);
+    const result = await pool.query(`
+      SELECT c.id, c.name, c.slug, c.description, c.icon, COUNT(p.id)::int AS product_count
+      FROM store_categories c
+      LEFT JOIN store_products p ON p.category_id = c.id AND p.is_published = TRUE
+      WHERE c.slug = $1
+      GROUP BY c.id
+      LIMIT 1
+    `, [slug]);
+    if (!result.rowCount) return res.status(404).json({ error: 'not_found', message: 'القسم غير موجود.' });
+    res.json(result.rows[0]);
+  } catch (error) { next(error); }
+});
+
 app.get('/api/products', requireDatabase, async (req, res, next) => {
   try {
     const search = String(req.query.q || '').trim().slice(0, 100);
     const category = String(req.query.category || '').trim().slice(0, 100);
+    const type = String(req.query.type || '').trim().toLowerCase();
+    const featured = String(req.query.featured || '').trim().toLowerCase();
+    const sort = String(req.query.sort || '').trim().toLowerCase();
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 24, 1), 60);
     const offset = Math.max(Number.parseInt(req.query.offset, 10) || 0, 0);
     const values = [];
@@ -276,19 +317,36 @@ app.get('/api/products', requireDatabase, async (req, res, next) => {
 
     if (search) {
       values.push(`%${search.replace(/[\\%_]/g, '\\$&')}%`);
-      where.push(`(p.name ILIKE $ ${values.length} OR p.short_description ILIKE $${values.length} OR p.developer ILIKE $${values.length})`.replace('$ ', '$'));
+      where.push(`(p.name ILIKE $${values.length} OR p.short_description ILIKE $${values.length} OR p.developer ILIKE $${values.length} OR p.description ILIKE $${values.length})`);
     }
     if (category) {
       values.push(category);
       where.push(`c.slug = $${values.length}`);
     }
+    if (type === 'app' || type === 'game') {
+      values.push(type);
+      where.push(`p.type = $${values.length}`);
+    }
+    if (featured === 'true' || featured === '1') {
+      where.push('p.is_featured = TRUE');
+    }
+
+    let orderBy = 'p.is_featured DESC, p.created_at DESC';
+    if (sort === 'downloads') {
+      orderBy = 'p.downloads DESC, p.created_at DESC';
+    } else if (sort === 'rating') {
+      orderBy = 'p.rating DESC NULLS LAST, p.created_at DESC';
+    } else if (sort === 'newest') {
+      orderBy = 'p.created_at DESC';
+    }
+
     const countResult = await pool.query(
       `SELECT COUNT(*)::int AS total FROM store_products p LEFT JOIN store_categories c ON c.id=p.category_id WHERE ${where.join(' AND ')}`,
       values
     );
     values.push(limit, offset);
     const result = await pool.query(
-      `${PRODUCT_SELECT} WHERE ${where.join(' AND ')} ORDER BY p.is_featured DESC, p.created_at DESC LIMIT $${values.length - 1} OFFSET $${values.length}`,
+      `${PRODUCT_SELECT} WHERE ${where.join(' AND ')} ORDER BY ${orderBy} LIMIT $${values.length - 1} OFFSET $${values.length}`,
       values
     );
     res.json({ items: result.rows.map(safeProduct), total: countResult.rows[0].total, limit, offset });
@@ -303,6 +361,22 @@ app.get('/api/products/:slug', requireDatabase, async (req, res, next) => {
     );
     if (!result.rowCount) return res.status(404).json({ error: 'not_found', message: 'ما لكينا هالمنتج.' });
     res.json(safeProduct(result.rows[0]));
+  } catch (error) { next(error); }
+});
+
+app.get('/api/products/:slug/related', requireDatabase, async (req, res, next) => {
+  try {
+    const slug = String(req.params.slug).slice(0, 160);
+    const current = await pool.query('SELECT id, category_id, type FROM store_products WHERE slug = $1 AND is_published = TRUE LIMIT 1', [slug]);
+    if (!current.rowCount) return res.status(404).json({ error: 'not_found', message: 'ما لكينا هالمنتج.' });
+    const row = current.rows[0];
+    const related = await pool.query(`
+      ${PRODUCT_SELECT}
+      WHERE p.is_published = TRUE AND p.id <> $1 AND (p.category_id = $2 OR p.type = $3)
+      ORDER BY (p.category_id = $2) DESC, p.is_featured DESC, p.rating DESC NULLS LAST, p.downloads DESC
+      LIMIT 6
+    `, [row.id, row.category_id, row.type]);
+    res.json({ items: related.rows.map(safeProduct) });
   } catch (error) { next(error); }
 });
 
@@ -383,13 +457,24 @@ function parseProduct(body) {
   const downloadUrl = adminText(body.downloadUrl, 2000);
   const rating = body.rating === '' || body.rating == null ? null : Number(body.rating);
   const categoryId = body.categoryId === '' || body.categoryId == null ? null : Number(body.categoryId);
+  const type = body.type === 'game' ? 'game' : 'app';
+  let screenshots = '[]';
+  if (Array.isArray(body.screenshots)) {
+    screenshots = JSON.stringify(body.screenshots.map(s => String(s || '').trim()).filter(Boolean).slice(0, 12));
+  } else if (typeof body.screenshots === 'string') {
+    const list = body.screenshots.split(/[\n,]+/).map(s => s.trim()).filter(Boolean).slice(0, 12);
+    screenshots = JSON.stringify(list);
+  }
+  const platform = adminText(body.platform, 50) || 'Android';
+  const releaseNotes = adminText(body.releaseNotes, 5000);
+
   if (!name) return { error: 'اسم المنتج مطلوب.' };
   if (!slug) return { error: 'رابط المنتج غير صالح.' };
   if (imageUrl && !/^https?:\/\//i.test(imageUrl) && !imageUrl.startsWith('/')) return { error: 'رابط صورة المنتج غير صالح.' };
   if (downloadUrl && !/^https?:\/\//i.test(downloadUrl)) return { error: 'رابط التنزيل يجب أن يبدأ بـ http:// أو https://.' };
   if (rating !== null && (!Number.isFinite(rating) || rating < 0 || rating > 5 || Math.round(rating * 10) !== rating * 10)) return { error: 'التقييم يجب أن يكون بين 0 و5 وبحد أقصى منزلة عشرية واحدة.' };
   if (categoryId !== null && (!Number.isSafeInteger(categoryId) || categoryId < 1)) return { error: 'القسم المحدد غير صالح.' };
-  return { product: { name, slug, categoryId, shortDescription: adminText(body.shortDescription, 500), description: adminText(body.description, 20000), imageUrl, downloadUrl, version: adminText(body.version, 80), fileSize: adminText(body.fileSize, 80), developer: adminText(body.developer, 180), rating, featured: body.featured === true, published: body.published === true } };
+  return { product: { name, slug, categoryId, shortDescription: adminText(body.shortDescription, 500), description: adminText(body.description, 20000), imageUrl, downloadUrl, version: adminText(body.version, 80), fileSize: adminText(body.fileSize, 80), developer: adminText(body.developer, 180), rating, featured: body.featured === true, published: body.published === true, type, screenshots, platform, releaseNotes } };
 }
 function parseCategory(body) {
   const name = adminText(body.name, 100);
@@ -399,7 +484,7 @@ function parseCategory(body) {
 }
 app.get('/api/admin/categories', requireDatabase, requireAdmin, async (req, res, next) => {
   try {
-    const result = await pool.query('SELECT c.id,c.name,c.slug,c.description,c.created_at,COUNT(p.id)::int AS product_count FROM store_categories c LEFT JOIN store_products p ON p.category_id=c.id GROUP BY c.id ORDER BY c.name');
+    const result = await pool.query('SELECT c.id,c.name,c.slug,c.description,c.icon,c.created_at,COUNT(p.id)::int AS product_count FROM store_categories c LEFT JOIN store_products p ON p.category_id=c.id GROUP BY c.id ORDER BY c.name');
     res.json({ items: result.rows });
   } catch (error) { next(error); }
 });
@@ -432,10 +517,19 @@ app.delete('/api/admin/categories/:id', requireDatabase, requireAdmin, requireAd
 app.get('/api/admin/products', requireDatabase, requireAdmin, async (req, res, next) => {
   try {
     const q = adminText(String(req.query.q || ''), 100);
+    const type = adminText(String(req.query.type || ''), 20);
     const values = [];
-    let where = '';
-    if (q) { values.push('%' + q + '%'); where = 'WHERE p.name ILIKE $1 OR p.slug ILIKE $1 OR p.developer ILIKE $1'; }
-    const result = await pool.query('SELECT p.id,p.name,p.slug,p.category_id AS "categoryId",c.name AS "categoryName",p.short_description AS "shortDescription",p.description,p.image_url AS "imageUrl",p.download_url AS "downloadUrl",p.version,p.file_size AS "fileSize",p.developer,p.rating,p.is_featured AS featured,p.is_published AS published,p.downloads,p.created_at AS "createdAt",p.updated_at AS "updatedAt" FROM store_products p LEFT JOIN store_categories c ON c.id=p.category_id ' + where + ' ORDER BY p.updated_at DESC NULLS LAST,p.created_at DESC LIMIT 500', values);
+    const where = [];
+    if (q) {
+      values.push('%' + q + '%');
+      where.push(`(p.name ILIKE $${values.length} OR p.slug ILIKE $${values.length} OR p.developer ILIKE $${values.length})`);
+    }
+    if (type === 'app' || type === 'game') {
+      values.push(type);
+      where.push(`p.type = $${values.length}`);
+    }
+    const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
+    const result = await pool.query('SELECT p.id,p.name,p.slug,p.category_id AS "categoryId",c.name AS "categoryName",p.short_description AS "shortDescription",p.description,p.image_url AS "imageUrl",p.download_url AS "downloadUrl",p.version,p.file_size AS "fileSize",p.developer,p.rating,p.is_featured AS featured,p.is_published AS published,p.downloads,p.type,p.screenshots,p.platform,p.release_notes AS "releaseNotes",p.created_at AS "createdAt",p.updated_at AS "updatedAt" FROM store_products p LEFT JOIN store_categories c ON c.id=p.category_id ' + whereClause + ' ORDER BY p.updated_at DESC NULLS LAST,p.created_at DESC LIMIT 500', values);
     res.json({ items: result.rows });
   } catch (error) { next(error); }
 });
@@ -445,7 +539,7 @@ app.post('/api/admin/products', requireDatabase, requireAdmin, requireAdminCsrf,
   const p = parsed.product;
   try {
     if (p.categoryId !== null) { const c = await pool.query('SELECT id FROM store_categories WHERE id=$1', [p.categoryId]); if (!c.rowCount) return res.status(400).json({ message: 'القسم المحدد غير موجود.' }); }
-    const result = await pool.query('INSERT INTO store_products(name,slug,category_id,short_description,description,image_url,download_url,version,file_size,developer,rating,is_featured,is_published) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id,name,slug,rating', [p.name,p.slug,p.categoryId,p.shortDescription,p.description,p.imageUrl,p.downloadUrl,p.version,p.fileSize,p.developer,p.rating,p.featured,p.published]);
+    const result = await pool.query('INSERT INTO store_products(name,slug,category_id,short_description,description,image_url,download_url,version,file_size,developer,rating,is_featured,is_published,type,screenshots,platform,release_notes) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING id,name,slug,rating', [p.name,p.slug,p.categoryId,p.shortDescription,p.description,p.imageUrl,p.downloadUrl,p.version,p.fileSize,p.developer,p.rating,p.featured,p.published,p.type,p.screenshots,p.platform,p.releaseNotes]);
     res.status(201).json({ item: result.rows[0] });
   } catch (error) { if (error.code === '23505') return res.status(409).json({ message: 'رابط المنتج مستخدم مسبقاً.' }); next(error); }
 });
@@ -455,7 +549,7 @@ app.put('/api/admin/products/:id', requireDatabase, requireAdmin, requireAdminCs
   const p = parsed.product;
   try {
     if (p.categoryId !== null) { const c = await pool.query('SELECT id FROM store_categories WHERE id=$1', [p.categoryId]); if (!c.rowCount) return res.status(400).json({ message: 'القسم المحدد غير موجود.' }); }
-    const result = await pool.query('UPDATE store_products SET name=$1,slug=$2,category_id=$3,short_description=$4,description=$5,image_url=$6,download_url=$7,version=$8,file_size=$9,developer=$10,rating=$11,is_featured=$12,is_published=$13,updated_at=NOW() WHERE id=$14 RETURNING id,name,slug,rating', [p.name,p.slug,p.categoryId,p.shortDescription,p.description,p.imageUrl,p.downloadUrl,p.version,p.fileSize,p.developer,p.rating,p.featured,p.published,req.params.id]);
+    const result = await pool.query('UPDATE store_products SET name=$1,slug=$2,category_id=$3,short_description=$4,description=$5,image_url=$6,download_url=$7,version=$8,file_size=$9,developer=$10,rating=$11,is_featured=$12,is_published=$13,type=$14,screenshots=$15,platform=$16,release_notes=$17,updated_at=NOW() WHERE id=$18 RETURNING id,name,slug,rating', [p.name,p.slug,p.categoryId,p.shortDescription,p.description,p.imageUrl,p.downloadUrl,p.version,p.fileSize,p.developer,p.rating,p.featured,p.published,p.type,p.screenshots,p.platform,p.releaseNotes,req.params.id]);
     if (!result.rowCount) return res.status(404).json({ message: 'المنتج غير موجود.' });
     res.json({ item: result.rows[0] });
   } catch (error) { if (error.code === '23505') return res.status(409).json({ message: 'رابط المنتج مستخدم مسبقاً.' }); next(error); }
