@@ -44,7 +44,7 @@ assert.match(server, /rating: row\.rating == null \? null : Number\(row\.rating\
 assert.match(server, /rating=\$11/, 'admin product updates should persist rating');
 assert.match(app, /class="product-rating"/, 'product cards should show the rating row');
 assert.match(app, /class="rating-star"/, 'product cards should render five fractional-fill stars');
-assert.match(app, /<h3 class="product-title"><a href="\\/product\\//, 'product title should link to details');
+assert.ok(app.includes('<h3 class="product-title"><a href="/product/${slug}"'), 'product title should link to details');
 assert.match(styles, /product-image-wrap\{flex:0 0 124px/, 'product icon should occupy the RTL right-hand column');
 assert.match(admin, /id="product-rating"/, 'admin should provide an optional product rating field');
 console.log('UI contract tests passed: private admin route, theme, detail navigation, database ratings and responsive product rows.');
