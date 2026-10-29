@@ -155,56 +155,274 @@
     }
   }
 
+  let heroSliderTimer = null;
+  let heroCurrentSlide = 0;
+  let heroSlidesCount = 0;
+
+  function setHeroSlide(index) {
+    const slides = $$('.hero-slide');
+    const dots = $$('.hero-dot');
+    if (!slides.length) return;
+    heroCurrentSlide = (index + slides.length) % slides.length;
+    slides.forEach((slide, i) => {
+      slide.classList.toggle('active', i === heroCurrentSlide);
+    });
+    dots.forEach((dot, i) => {
+      dot.classList.toggle('active', i === heroCurrentSlide);
+    });
+  }
+
+  function startHeroTimer() {
+    if (heroSliderTimer) clearInterval(heroSliderTimer);
+    if (heroSlidesCount > 1) {
+      heroSliderTimer = setInterval(() => {
+        setHeroSlide(heroCurrentSlide + 1);
+      }, 5500);
+    }
+  }
+
+  function initHeroSlider(featuredItems) {
+    const slider = $('#hero-slider');
+    const dotsContainer = $('#hero-dots');
+    if (!slider || !dotsContainer) return;
+
+    if (!Array.isArray(featuredItems) || !featuredItems.length) {
+      dotsContainer.hidden = true;
+      heroSlidesCount = 0;
+      return;
+    }
+
+    heroSlidesCount = featuredItems.length;
+    const slidesHtml = featuredItems.map((item, index) => {
+      const isGame = item.type === 'game';
+      const mainCat = isGame ? 'Games' : 'Apps';
+      const canonicalIdentifier = item.packageName || item.slug;
+      const canonicalUrl = item.detailUrl || `/category/${mainCat}/${encodeURIComponent(canonicalIdentifier)}`;
+      const typeLabel = isGame ? '🎮 لعبة مميزة' : '📱 تطبيق مميز';
+      const icon = item.imageUrl
+        ? `<img class="hero-item-icon" src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.name)}" onerror="this.src='/Logo.png'">`
+        : `<div class="hero-item-icon-ph">${iconFor(item.name)}</div>`;
+      const bgStyle = item.coverImage
+        ? `background-image: linear-gradient(135deg, rgba(16, 107, 59, 0.92) 0%, rgba(23, 26, 24, 0.88) 100%), url('${escapeHtml(item.coverImage)}'); background-size: cover; background-position: center;`
+        : `background: linear-gradient(135deg, #106b3b 0%, #171a18 100%);`;
+
+      return `
+        <div class="hero-slide ${index === 0 ? 'active' : ''}" style="${bgStyle}" data-slide-index="${index}">
+          <div class="hero-slide-body">
+            <div class="hero-slide-content">
+              <span class="hero-slide-badge">${typeLabel}</span>
+              <h2 class="hero-slide-title">${escapeHtml(item.name)}</h2>
+              <p class="hero-slide-desc">${escapeHtml(item.shortDescription || item.description || 'تطبيق مميز متوفر للتحميل المباشر والآمن.')}</p>
+              <div class="hero-slide-actions">
+                <a class="hero-button" href="/product/${encodeURIComponent(item.slug)}" data-product="${escapeHtml(item.slug)}" data-canonical="${escapeHtml(canonicalUrl)}">
+                  <span>تحميل</span>
+                  <span aria-hidden="true">←</span>
+                </a>
+                <button class="hero-pill-btn hero-pill-light" type="button" data-product="${escapeHtml(item.slug)}" data-canonical="${escapeHtml(canonicalUrl)}">
+                  استعراض التفاصيل
+                </button>
+              </div>
+            </div>
+            <div class="hero-slide-art">
+              ${icon}
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    slider.innerHTML = slidesHtml;
+
+    if (featuredItems.length > 1) {
+      dotsContainer.innerHTML = featuredItems.map((_, i) => `
+        <button class="hero-dot ${i === 0 ? 'active' : ''}" type="button" data-slide="${i}" aria-label="الشريحة ${i + 1}"></button>
+      `).join('');
+      dotsContainer.hidden = false;
+      startHeroTimer();
+    } else {
+      dotsContainer.hidden = true;
+    }
+  }
+
+  function renderSnapCard(item, rankIndex = null) {
+    const slug = encodeURIComponent(item.slug);
+    const isGame = item.type === 'game';
+    const mainCat = isGame ? 'Games' : 'Apps';
+    const canonicalIdentifier = item.packageName || item.slug;
+    const canonicalUrl = item.detailUrl || `/category/${mainCat}/${encodeURIComponent(canonicalIdentifier)}`;
+    const image = item.imageUrl
+      ? `<img class="snap-card-img" src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.name)}" loading="lazy" onerror="this.src='/Logo.png'">`
+      : `<div class="snap-card-ph" aria-hidden="true">${iconFor(item.name)}</div>`;
+
+    const rating = item.rating == null || !Number.isFinite(Number(item.rating))
+      ? null
+      : Math.max(0, Math.min(5, Number(item.rating)));
+    const ratingText = rating == null ? '' : `${rating.toFixed(1)} ★`;
+
+    const rankBadge = rankIndex != null && rankIndex < 3
+      ? `<span class="snap-rank-badge rank-${rankIndex + 1}">${rankIndex + 1}</span>`
+      : '';
+
+    return `
+      <article class="snap-card" data-slug="${escapeHtml(item.slug)}">
+        <a class="snap-card-inner" href="/product/${slug}" data-product="${escapeHtml(item.slug)}" data-canonical="${escapeHtml(canonicalUrl)}" aria-label="عرض ${escapeHtml(item.name)}">
+          <div class="snap-icon-wrap">
+            ${image}
+            ${rankBadge}
+          </div>
+          <span class="snap-card-title">${escapeHtml(item.name)}</span>
+          ${ratingText ? `<span class="snap-card-rating">${escapeHtml(ratingText)}</span>` : `<span class="snap-card-cat">${escapeHtml(item.category || (isGame ? 'ألعاب' : 'تطبيقات'))}</span>`}
+        </a>
+      </article>
+    `;
+  }
+
+  function renderEditorCard(item) {
+    const slug = encodeURIComponent(item.slug);
+    const isGame = item.type === 'game';
+    const mainCat = isGame ? 'Games' : 'Apps';
+    const canonicalIdentifier = item.packageName || item.slug;
+    const canonicalUrl = item.detailUrl || `/category/${mainCat}/${encodeURIComponent(canonicalIdentifier)}`;
+    const icon = item.imageUrl
+      ? `<img class="editor-thumb-img" src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.name)}" loading="lazy" onerror="this.src='/Logo.png'">`
+      : `<div class="editor-thumb-ph">${iconFor(item.name)}</div>`;
+    
+    const bannerImg = item.coverImage
+      ? `<img class="editor-banner-art" src="${escapeHtml(item.coverImage)}" alt="" loading="lazy" onerror="this.remove()">`
+      : `<div class="editor-banner-ph"><span class="editor-ph-tag">${isGame ? '🎮 لعبة' : '📱 تطبيق'}</span></div>`;
+
+    const rating = item.rating == null || !Number.isFinite(Number(item.rating))
+      ? null
+      : Math.max(0, Math.min(5, Number(item.rating)));
+    const ratingText = rating == null ? '' : `${rating.toFixed(1)} ★`;
+
+    return `
+      <article class="editor-card" data-slug="${escapeHtml(item.slug)}">
+        <a class="editor-banner-wrap" href="/product/${slug}" data-product="${escapeHtml(item.slug)}" data-canonical="${escapeHtml(canonicalUrl)}">
+          ${bannerImg}
+        </a>
+        <div class="editor-card-footer">
+          <a class="editor-footer-info" href="/product/${slug}" data-product="${escapeHtml(item.slug)}" data-canonical="${escapeHtml(canonicalUrl)}">
+            ${icon}
+            <div class="editor-text-wrap">
+              <span class="editor-title">${escapeHtml(item.name)}</span>
+              <div class="editor-sub-meta">
+                ${ratingText ? `<span class="editor-rating">${ratingText}</span>` : ''}
+                <span class="editor-cat">${escapeHtml(item.category || (isGame ? 'ألعاب' : 'تطبيقات'))}</span>
+              </div>
+            </div>
+          </a>
+          <a class="editor-dl-btn" href="/product/${slug}" data-product="${escapeHtml(item.slug)}" data-canonical="${escapeHtml(canonicalUrl)}">
+            تحميل
+          </a>
+        </div>
+      </article>
+    `;
+  }
+
   async function loadShowcaseSections() {
-    // 1. Featured items
+    // 1. Featured items for Hero Slider, Discovery, and Featured Grid
     try {
-      const r = await fetch('/api/products?featured=true&limit=6', { headers: { Accept: 'application/json' } });
+      const r = await fetch('/api/products?featured=true&limit=10', { headers: { Accept: 'application/json' } });
       if (r.ok) {
         const d = await r.json();
         const fSec = $('#featured-section');
         const fGrid = $('#featured-grid');
+        const dSec = $('#discovery-section');
+        const dGrid = $('#discovery-grid');
+
         if (d.items && d.items.length) {
-          fGrid.innerHTML = d.items.map(productCard).join('');
-          fSec.hidden = false;
+          initHeroSlider(d.items.slice(0, 5));
+
+          if (dGrid && dSec) {
+            dGrid.innerHTML = d.items.map(item => renderSnapCard(item)).join('');
+            dSec.hidden = false;
+          }
+
+          if (fGrid && fSec) {
+            fGrid.innerHTML = d.items.map(productCard).join('');
+            fSec.hidden = false;
+          }
         } else {
-          fSec.hidden = true;
+          if (dSec) dSec.hidden = true;
+          if (fSec) fSec.hidden = true;
         }
       }
     } catch {}
 
-    // 2. Latest Apps
+    // 2. Popular Games in 24h
     try {
-      const r = await fetch('/api/products?type=app&limit=4', { headers: { Accept: 'application/json' } });
+      const r = await fetch('/api/products?type=game&sort=downloads&limit=12', { headers: { Accept: 'application/json' } });
       if (r.ok) {
         const d = await r.json();
-        const aSec = $('#apps-section');
-        const aGrid = $('#apps-grid');
-        if (d.items && d.items.length) {
-          aGrid.innerHTML = d.items.map(productCard).join('');
-          aSec.hidden = false;
-        } else {
-          aSec.hidden = true;
-        }
-      }
-    } catch {}
-
-    // 3. Latest Games
-    try {
-      const r = await fetch('/api/products?type=game&limit=4', { headers: { Accept: 'application/json' } });
-      if (r.ok) {
-        const d = await r.json();
+        const popGamesSec = $('#popular-games-section');
+        const popGamesGrid = $('#popular-games-grid');
         const gSec = $('#games-section');
         const gGrid = $('#games-grid');
+
         if (d.items && d.items.length) {
-          gGrid.innerHTML = d.items.map(productCard).join('');
-          gSec.hidden = false;
+          if (popGamesGrid && popGamesSec) {
+            popGamesGrid.innerHTML = d.items.map((item, idx) => renderSnapCard(item, idx)).join('');
+            popGamesSec.hidden = false;
+          }
+          if (gGrid && gSec) {
+            gGrid.innerHTML = d.items.slice(0, 4).map(productCard).join('');
+            gSec.hidden = false;
+          }
         } else {
-          gSec.hidden = true;
+          if (popGamesSec) popGamesSec.hidden = true;
+          if (gSec) gSec.hidden = true;
         }
       }
     } catch {}
 
-    // 4. Most Downloaded
+    // 3. Popular Apps in 24h
+    try {
+      const r = await fetch('/api/products?type=app&sort=downloads&limit=12', { headers: { Accept: 'application/json' } });
+      if (r.ok) {
+        const d = await r.json();
+        const popAppsSec = $('#popular-apps-section');
+        const popAppsGrid = $('#popular-apps-grid');
+        const aSec = $('#apps-section');
+        const aGrid = $('#apps-grid');
+
+        if (d.items && d.items.length) {
+          if (popAppsGrid && popAppsSec) {
+            popAppsGrid.innerHTML = d.items.map((item, idx) => renderSnapCard(item, idx)).join('');
+            popAppsSec.hidden = false;
+          }
+          if (aGrid && aSec) {
+            aGrid.innerHTML = d.items.slice(0, 4).map(productCard).join('');
+            aSec.hidden = false;
+          }
+        } else {
+          if (popAppsSec) popAppsSec.hidden = true;
+          if (aSec) aSec.hidden = true;
+        }
+      }
+    } catch {}
+
+    // 4. Editor's Choice Section (top rating or featured items with covers)
+    try {
+      const r = await fetch('/api/products?sort=rating&limit=6', { headers: { Accept: 'application/json' } });
+      if (r.ok) {
+        const d = await r.json();
+        const edSec = $('#editors-choice-section');
+        const edGrid = $('#editors-choice-grid');
+        const ratedItems = (d.items || []).filter(i => i.rating != null);
+        if (ratedItems.length && edSec && edGrid) {
+          edGrid.innerHTML = ratedItems.map(renderEditorCard).join('');
+          edSec.hidden = false;
+        } else if (d.items && d.items.length && edSec && edGrid) {
+          edGrid.innerHTML = d.items.slice(0, 4).map(renderEditorCard).join('');
+          edSec.hidden = false;
+        } else if (edSec) {
+          edSec.hidden = true;
+        }
+      }
+    } catch {}
+
+    // 5. Most Downloaded Section (standard rows)
     try {
       const r = await fetch('/api/products?sort=downloads&limit=4', { headers: { Accept: 'application/json' } });
       if (r.ok) {
@@ -212,10 +430,10 @@
         const dSec = $('#downloads-section');
         const dGrid = $('#downloads-grid');
         const popularItems = (d.items || []).filter(item => (item.downloads || 0) > 0);
-        if (popularItems.length) {
+        if (popularItems.length && dGrid && dSec) {
           dGrid.innerHTML = popularItems.map(productCard).join('');
           dSec.hidden = false;
-        } else {
+        } else if (dSec) {
           dSec.hidden = true;
         }
       }
@@ -647,7 +865,17 @@
       return;
     }
 
-    // 7. View all categories button
+    // 7. Hero dots navigation
+    const heroDot = event.target.closest('.hero-dot');
+    if (heroDot) {
+      event.preventDefault();
+      const dotIndex = Number(heroDot.dataset.slide) || 0;
+      setHeroSlide(dotIndex);
+      startHeroTimer();
+      return;
+    }
+
+    // 7b. View all categories button
     if (event.target.closest('#view-all-categories-btn')) {
       event.preventDefault();
       history.pushState({ view: 'categories' }, '', '/categories');

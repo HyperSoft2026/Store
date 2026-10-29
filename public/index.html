@@ -63,23 +63,110 @@
       <!-- Standard Storefront Main Section -->
       <div id="store-main-view">
         <section class="hero" id="hero-banner">
-          <div class="hero-copy">
-            <span class="eyebrow">HyperSoft Store · المتجر الرقمي الحديث</span>
-            <h1>لكل تطبيق أو لعبة تدور عليها، <span>تلكاها هنا.</span></h1>
-            <p>اكتشف أفضل التطبيقات والألعاب بروابط تنزيل مباشرة، آمنة وسريعة، وبواجهة عربية أنيقة ومتجاوبة.</p>
-            <div class="hero-actions">
-              <a class="hero-button" href="#catalog">تصفّح المنتجات <span>←</span></a>
-              <button class="hero-pill-btn" data-store-tab="apps" type="button">📱 التطبيقات</button>
-              <button class="hero-pill-btn" data-store-tab="games" type="button">🎮 الألعاب</button>
+          <div class="hero-slider" id="hero-slider" aria-live="polite">
+            <div class="hero-slide active" id="hero-default-slide">
+              <div class="hero-copy">
+                <span class="eyebrow">HyperSoft Store · متجر Android الرقمي الحديث</span>
+                <h1>لكل تطبيق أو لعبة تدور عليها، <span>تلكاها هنا.</span></h1>
+                <p>اكتشف أفضل التطبيقات والألعاب بروابط تنزيل مباشرة، آمنة وسريعة، وبواجهة عربية أنيقة ومتجاوبة.</p>
+                <div class="hero-actions">
+                  <a class="hero-button" href="#catalog">تصفّح المنتجات <span>←</span></a>
+                  <button class="hero-pill-btn" data-store-tab="apps" type="button">📱 التطبيقات</button>
+                  <button class="hero-pill-btn" data-store-tab="games" type="button">🎮 الألعاب</button>
+                </div>
+              </div>
+              <div class="hero-art" aria-hidden="true">
+                <div class="art-orbit orbit-one"></div>
+                <div class="art-orbit orbit-two"></div>
+                <div class="art-tile">S<span>✦</span></div>
+                <div class="art-dot dot-one"></div>
+                <div class="art-dot dot-two"></div>
+              </div>
             </div>
           </div>
-          <div class="hero-art" aria-hidden="true">
-            <div class="art-orbit orbit-one"></div>
-            <div class="art-orbit orbit-two"></div>
-            <div class="art-tile">S<span>✦</span></div>
-            <div class="art-dot dot-one"></div>
-            <div class="art-dot dot-two"></div>
+          <div class="hero-dots" id="hero-dots" hidden></div>
+        </section>
+
+        <!-- Quick Category Icon Shortcuts Bar (APKPure Reference Style) -->
+        <nav class="quick-category-nav" aria-label="أقسام الوصول السريع">
+          <button class="quick-cat-btn" data-store-tab="games" type="button">
+            <div class="quick-cat-icon icon-games" aria-hidden="true">🎮</div>
+            <span class="quick-cat-label">ألعاب</span>
+          </button>
+          <button class="quick-cat-btn" data-store-tab="apps" type="button">
+            <div class="quick-cat-icon icon-apps" aria-hidden="true">📱</div>
+            <span class="quick-cat-label">تطبيقات</span>
+          </button>
+          <button class="quick-cat-btn" data-store-tab="categories" type="button">
+            <div class="quick-cat-icon icon-categories" aria-hidden="true">📂</div>
+            <span class="quick-cat-label">الأقسام</span>
+          </button>
+          <button class="quick-cat-btn" data-store-tab="posts" type="button">
+            <div class="quick-cat-icon icon-posts" aria-hidden="true">📰</div>
+            <span class="quick-cat-label">الأخبار</span>
+          </button>
+        </nav>
+
+        <!-- Mini Promotion Strip -->
+        <div class="store-mini-banner">
+          <div class="mini-banner-content">
+            <div class="mini-banner-icon">
+              <img src="/Logo.png" alt="" onerror="this.src='/Logo.svg'">
+            </div>
+            <div class="mini-banner-text">
+              <strong>HyperSoft Store Android</strong>
+              <p>تطبيقات وألعاب آمنة ومفحوصة بروابط تنزيل مباشرة وسريعة</p>
+            </div>
           </div>
+          <button class="mini-banner-btn" data-store-tab="top" type="button">الأكثر تحميلاً <span>↓</span></button>
+        </div>
+
+        <!-- Section 1: Discovery / الاكتشاف (APKPure Reference) -->
+        <section class="section showcase-section" id="discovery-section" hidden>
+          <div class="section-heading section-heading-compact">
+            <a href="#catalog" class="section-title-link">
+              <h2>الاكتشاف</h2>
+              <span class="section-title-arrow">‹</span>
+            </a>
+            <button class="section-view-all" data-view-more="featured" type="button">عرض المزيد <span>←</span></button>
+          </div>
+          <div id="discovery-grid" class="horizontal-snap-row" aria-live="polite"></div>
+        </section>
+
+        <!-- Section 2: Popular Games in 24h / الألعاب الشهيرة (APKPure Reference) -->
+        <section class="section showcase-section" id="popular-games-section" hidden>
+          <div class="section-heading section-heading-compact">
+            <a href="/category/Games" class="section-title-link" data-store-tab="games">
+              <h2>الألعاب الشهيرة في آخر 24 ساعة</h2>
+              <span class="section-title-arrow">‹</span>
+            </a>
+            <button class="section-view-all" data-view-more="games" type="button">عرض كل الألعاب <span>←</span></button>
+          </div>
+          <div id="popular-games-grid" class="horizontal-snap-row" aria-live="polite"></div>
+        </section>
+
+        <!-- Section 3: Popular Apps in 24h / التطبيقات الشهيرة (APKPure Reference) -->
+        <section class="section showcase-section" id="popular-apps-section" hidden>
+          <div class="section-heading section-heading-compact">
+            <a href="/category/Apps" class="section-title-link" data-store-tab="apps">
+              <h2>التطبيقات الشهيرة في آخر 24 ساعة</h2>
+              <span class="section-title-arrow">‹</span>
+            </a>
+            <button class="section-view-all" data-view-more="apps" type="button">عرض كل التطبيقات <span>←</span></button>
+          </div>
+          <div id="popular-apps-grid" class="horizontal-snap-row" aria-live="polite"></div>
+        </section>
+
+        <!-- Section 4: Editor's Choice / توصية المحرر (APKPure Reference) -->
+        <section class="section showcase-section" id="editors-choice-section" hidden>
+          <div class="section-heading section-heading-compact">
+            <div class="section-title-link">
+              <h2>توصية المحرّر الأسبوعية</h2>
+              <span class="section-title-arrow">‹</span>
+            </div>
+            <button class="section-view-all" data-view-more="featured" type="button">عرض المزيد <span>←</span></button>
+          </div>
+          <div id="editors-choice-grid" class="editors-choice-row" aria-live="polite"></div>
         </section>
 
         <!-- Quick Filter Badges Bar -->
