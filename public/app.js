@@ -69,6 +69,9 @@
     }).join('');
     const isGame = item.type === 'game';
     const typeLabel = isGame ? '🎮 لعبة' : '📱 تطبيق';
+    const mainCat = isGame ? 'Games' : 'Apps';
+    const canonicalIdentifier = item.packageName || item.slug;
+    const canonicalUrl = item.detailUrl || `/category/${mainCat}/${encodeURIComponent(canonicalIdentifier)}`;
     const category = item.category
       ? `<span class="product-category">${escapeHtml(item.category)}</span>`
       : `<span class="product-category">${typeLabel}</span>`;
@@ -79,18 +82,18 @@
 
     return `
       <article class="product-card" data-slug="${escapeHtml(item.slug)}">
-        <a class="product-image-wrap" href="/product/${slug}" data-product="${escapeHtml(item.slug)}" aria-label="فتح صفحة ${escapeHtml(item.name)}">
+        <a class="product-image-wrap" href="/product/${slug}" data-product="${escapeHtml(item.slug)}" data-canonical="${escapeHtml(canonicalUrl)}" data-main-cat="${mainCat}" aria-label="فتح صفحة ${escapeHtml(item.name)}">
           ${image}
           ${item.featured ? '<span class="product-badge">مميّز</span>' : ''}
           <span class="product-type-badge">${typeLabel}</span>
         </a>
         <div class="product-body">
-          <h3 class="product-title"><a href="/product/${slug}" data-product="${escapeHtml(item.slug)}">${escapeHtml(item.name)}</a></h3>
+          <h3 class="product-title"><a href="/product/${slug}" data-product="${escapeHtml(item.slug)}" data-canonical="${escapeHtml(canonicalUrl)}">${escapeHtml(item.name)}</a></h3>
           <div class="product-rating" aria-label="${ratingLabel}">
             <span class="rating-value">${ratingText}</span>
             <span class="rating-stars" role="img" aria-label="${ratingLabel}">${stars}</span>
           </div>
-          <a class="product-link" href="/product/${slug}" data-product="${escapeHtml(item.slug)}">تحميل <span aria-hidden="true">←</span></a>
+          <a class="product-link" href="/product/${slug}" data-product="${escapeHtml(item.slug)}" data-canonical="${escapeHtml(canonicalUrl)}">تحميل <span aria-hidden="true">←</span></a>
           <p class="product-description">${escapeHtml(item.shortDescription || item.description || 'تفاصيل المنتج راح تلكاها بصفحة المنتج.')}</p>
           <div class="product-meta">${category}${version}${size}</div>
         </div>
@@ -248,16 +251,21 @@
     const previewGrid = $('#categories-preview-grid');
     if (!previewGrid || !state.categories.length) return;
     const cats = state.categories.slice(0, 8);
-    previewGrid.innerHTML = cats.map(cat => `
-      <article class="category-card" data-category-slug="${escapeHtml(cat.slug)}">
+    previewGrid.innerHTML = cats.map(cat => {
+      const isMain = cat.slug === 'Apps' || cat.slug === 'Games';
+      const badgeText = cat.slug === 'Apps' ? 'قسم رئيسي: تطبيقات' : cat.slug === 'Games' ? 'قسم رئيسي: ألعاب' : (cat.parentSlug === 'Apps' ? 'تطبيقات' : cat.parentSlug === 'Games' ? 'ألعاب' : '');
+      const badgeStyle = isMain ? 'background:#eaf5ee;color:#16834a;' : (cat.parentSlug === 'Games' ? 'background:#f5f3ff;color:#7c3aed;' : 'background:#f0fdf4;color:#15803d;');
+      return `
+      <article class="category-card" data-category-slug="${escapeHtml(cat.slug)}" data-parent-slug="${escapeHtml(cat.parentSlug || '')}">
         <div class="cat-card-top">
-          <div class="cat-card-icon">${escapeHtml(cat.icon || '◈')}</div>
+          <div class="cat-card-icon">${escapeHtml(cat.icon || (cat.slug === 'Games' || cat.parentSlug === 'Games' ? '🎮' : '📱'))}</div>
           <span class="cat-card-badge">${Number(cat.product_count) || 0} منتج</span>
         </div>
         <h3>${escapeHtml(cat.name)}</h3>
+        ${badgeText ? `<span class="category-parent-tag" style="display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;${badgeStyle}margin-bottom:8px">${escapeHtml(badgeText)}</span>` : ''}
         <p>${escapeHtml(cat.description || 'تصفح التطبيقات والألعاب التابعة لهذا القسم.')}</p>
-      </article>
-    `).join('');
+      </article>`;
+    }).join('');
     $('#categories-preview-section').hidden = false;
   }
 
@@ -268,35 +276,83 @@
       allGrid.innerHTML = '<p class="muted">لا توجد أقسام مسجلة حالياً.</p>';
       return;
     }
-    allGrid.innerHTML = state.categories.map(cat => `
-      <article class="category-card" data-category-slug="${escapeHtml(cat.slug)}">
-        <div class="cat-card-top">
-          <div class="cat-card-icon">${escapeHtml(cat.icon || '◈')}</div>
-          <span class="cat-card-badge">${Number(cat.product_count) || 0} منتج</span>
-        </div>
-        <h3>${escapeHtml(cat.name)}</h3>
-        <p>${escapeHtml(cat.description || 'تصفح التطبيقات والألعاب التابعة لهذا القسم.')}</p>
-      </article>
-    `).join('');
+    const mainCats = state.categories.filter(c => c.slug === 'Apps' || c.slug === 'Games');
+    const appsSub = state.categories.filter(c => c.parentSlug === 'Apps' && c.slug !== 'Apps');
+    const gamesSub = state.categories.filter(c => c.parentSlug === 'Games' && c.slug !== 'Games');
+    const others = state.categories.filter(c => !['Apps', 'Games'].includes(c.slug) && !['Apps', 'Games'].includes(c.parentSlug));
+
+    function cardHtml(cat) {
+      const isMain = cat.slug === 'Apps' || cat.slug === 'Games';
+      const badgeText = cat.slug === 'Apps' ? 'قسم رئيسي: تطبيقات' : cat.slug === 'Games' ? 'قسم رئيسي: ألعاب' : (cat.parentSlug === 'Apps' ? 'تطبيقات' : cat.parentSlug === 'Games' ? 'ألعاب' : '');
+      const badgeStyle = isMain ? 'background:#eaf5ee;color:#16834a;' : (cat.parentSlug === 'Games' ? 'background:#f5f3ff;color:#7c3aed;' : 'background:#f0fdf4;color:#15803d;');
+      return `
+        <article class="category-card" data-category-slug="${escapeHtml(cat.slug)}" data-parent-slug="${escapeHtml(cat.parentSlug || '')}">
+          <div class="cat-card-top">
+            <div class="cat-card-icon">${escapeHtml(cat.icon || (cat.slug === 'Games' || cat.parentSlug === 'Games' ? '🎮' : '📱'))}</div>
+            <span class="cat-card-badge">${Number(cat.product_count) || 0} منتج</span>
+          </div>
+          <h3>${escapeHtml(cat.name)}</h3>
+          ${badgeText ? `<span class="category-parent-tag" style="display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:6px;${badgeStyle}margin-bottom:8px">${escapeHtml(badgeText)}</span>` : ''}
+          <p>${escapeHtml(cat.description || 'تصفح التطبيقات والألعاب التابعة لهذا القسم.')}</p>
+        </article>`;
+    }
+
+    let html = '';
+    if (mainCats.length) {
+      html += `<div style="grid-column:1/-1;margin-bottom:8px"><h3 style="font-size:18px;font-weight:700;color:var(--text);margin:0 0 4px">الأقسام الرئيسية</h3><p style="font-size:13px;color:var(--muted);margin:0">الأقسام الأساسية التي يتفرع منها المتجر</p></div>`;
+      html += mainCats.map(cardHtml).join('');
+    }
+    if (appsSub.length) {
+      html += `<div style="grid-column:1/-1;margin-top:24px;margin-bottom:8px"><h3 style="font-size:18px;font-weight:700;color:var(--text);margin:0 0 4px">📱 تصنيفات التطبيقات</h3><p style="font-size:13px;color:var(--muted);margin:0">أقسام متخصصة تابعة لقسم التطبيقات</p></div>`;
+      html += appsSub.map(cardHtml).join('');
+    }
+    if (gamesSub.length) {
+      html += `<div style="grid-column:1/-1;margin-top:24px;margin-bottom:8px"><h3 style="font-size:18px;font-weight:700;color:var(--text);margin:0 0 4px">🎮 تصنيفات الألعاب</h3><p style="font-size:13px;color:var(--muted);margin:0">أقسام متخصصة تابعة لقسم الألعاب</p></div>`;
+      html += gamesSub.map(cardHtml).join('');
+    }
+    if (others.length) {
+      html += `<div style="grid-column:1/-1;margin-top:24px;margin-bottom:8px"><h3 style="font-size:18px;font-weight:700;color:var(--text);margin:0 0 4px">أقسام أخرى</h3></div>`;
+      html += others.map(cardHtml).join('');
+    }
+    allGrid.innerHTML = html;
   }
 
-  async function showCategoryDedicatedView(slug) {
+  async function showCategoryDedicatedView(slug, parentSlug = null, initialItems = null) {
     switchToView('category');
-    const cat = state.categories.find(c => c.slug === slug);
-    $('#cat-view-title').textContent = cat ? cat.name : slug;
+    let cat = state.categories.find(c => c.slug === slug);
+    if (!cat && (slug === 'Apps' || slug === 'Games')) {
+      cat = { name: slug === 'Apps' ? 'تطبيقات Android' : 'ألعاب Android', slug, description: slug === 'Apps' ? 'تصفح كافة التطبيقات وأدوات الإنتاجية.' : 'تصفح أحدث وأقوى الألعاب الرقمية.', icon: slug === 'Apps' ? '📱' : '🎮', product_count: 0 };
+    }
+    const catName = cat ? cat.name : slug;
+    const effectiveParent = parentSlug || cat?.parentSlug || '';
+    const parentBadge = effectiveParent ? ` (ضمن ${effectiveParent === 'Apps' ? 'التطبيقات' : 'الألعاب'})` : '';
+    $('#cat-view-title').textContent = catName + parentBadge;
     $('#cat-view-desc').textContent = cat?.description || 'تصفح أحدث التطبيقات والألعاب ضمن هذا القسم.';
-    $('#cat-view-icon').textContent = cat?.icon || '◈';
-    $('#cat-view-count').textContent = cat ? `${cat.product_count || 0} منتج منشور` : '';
+    $('#cat-view-icon').textContent = cat?.icon || (effectiveParent === 'Games' || slug === 'Games' ? '🎮' : '📱');
+    $('#cat-view-count').textContent = cat?.product_count ? `${cat.product_count} منتج منشور` : '';
 
     const catGrid = $('#category-products-grid');
-    catGrid.innerHTML = '<div class="loading-card"></div><div class="loading-card"></div>';
     const statusMsg = $('#category-status-message');
     statusMsg.hidden = true;
 
+    if (Array.isArray(initialItems)) {
+      if (!initialItems.length) {
+        catGrid.innerHTML = '<div class="empty-state" style="grid-column:1/-1"><div class="empty-icon">◈</div><h3>ماكو منتجات بهذا القسم حالياً</h3><p>تابعنا، راح نضيف تطبيقات وألعاب جديدة قريباً.</p></div>';
+      } else {
+        catGrid.innerHTML = initialItems.map(productCard).join('');
+      }
+      return;
+    }
+
+    catGrid.innerHTML = '<div class="loading-card"></div><div class="loading-card"></div>';
+
     try {
-      const type = $('.cat-tab-btn.active')?.dataset.catType || '';
+      const type = $('.cat-tab-btn.active')?.dataset.catType || (effectiveParent === 'Games' || slug === 'Games' ? 'game' : (effectiveParent === 'Apps' || slug === 'Apps' ? 'app' : ''));
       const sort = $('#cat-sort-select')?.value || 'newest';
-      const params = new URLSearchParams({ category: slug, limit: '40' });
+      const params = new URLSearchParams({ limit: '40' });
+      if (slug !== 'Apps' && slug !== 'Games') {
+        params.set('category', slug);
+      }
       if (type) params.set('type', type);
       if (sort !== 'newest') params.set('sort', sort);
       const res = await fetch('/api/products?' + params.toString(), { headers: { Accept: 'application/json' } });
@@ -410,13 +466,40 @@
     $('#catalog').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  function selectStoreTab(tab) {
+  async function resolveCatalogRoute(mainCat, secondPart) {
+    try {
+      const res = await fetch(`/api/catalog/${encodeURIComponent(mainCat)}/${encodeURIComponent(secondPart)}`);
+      if (!res.ok) {
+        showProductDetails(secondPart);
+        return;
+      }
+      const data = await res.json();
+      if (data.type === 'post' && data.post) {
+        showProductDetails(data.post.slug, data.post);
+      } else if (data.type === 'subcategory' && data.category) {
+        showCategoryDedicatedView(data.category.slug, data.category.parentSlug, data.items);
+      } else {
+        switchToView('main');
+      }
+    } catch {
+      showProductDetails(secondPart);
+    }
+  }
+
+  function showMainCategoryView(mainCat) {
+    const isGame = String(mainCat).toLowerCase() === 'games';
+    selectStoreTab(isGame ? 'games' : 'apps', false);
+  }
+
+  function selectStoreTab(tab, updateUrl = true) {
     $$('.store-nav-link').forEach(btn => btn.classList.toggle('active', (btn.dataset.storeTab || '') === tab));
     if (tab === 'categories') {
+      if (updateUrl) history.pushState({ view: 'categories' }, '', '/categories');
       switchToView('categories');
       return;
     }
     if (tab === 'apps') {
+      if (updateUrl) history.pushState({ mainCat: 'Apps' }, '', '/category/Apps');
       state.type = 'app';
       state.sort = 'newest';
       state.category = '';
@@ -429,6 +512,7 @@
       return;
     }
     if (tab === 'games') {
+      if (updateUrl) history.pushState({ mainCat: 'Games' }, '', '/category/Games');
       state.type = 'game';
       state.sort = 'newest';
       state.category = '';
@@ -441,6 +525,7 @@
       return;
     }
     if (tab === 'featured') {
+      if (updateUrl && location.pathname !== '/') history.pushState({}, '', '/');
       state.type = '';
       state.sort = 'newest';
       state.category = '';
@@ -452,6 +537,7 @@
       return;
     }
     if (tab === 'top') {
+      if (updateUrl && location.pathname !== '/') history.pushState({}, '', '/');
       state.type = '';
       state.sort = 'downloads';
       state.category = '';
@@ -463,11 +549,13 @@
       return;
     }
     if (tab === 'posts') {
+      if (updateUrl && location.pathname !== '/') history.pushState({}, '', '/');
       switchToView('main');
       $('#posts-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
       return;
     }
     // Default Home
+    if (updateUrl && location.pathname !== '/') history.pushState({}, '', '/');
     state.type = '';
     state.sort = 'newest';
     state.category = '';
@@ -520,8 +608,17 @@
     if (catCard) {
       event.preventDefault();
       const slug = catCard.dataset.categorySlug;
-      history.pushState({ category: slug }, '', '/category/' + encodeURIComponent(slug));
-      showCategoryDedicatedView(slug);
+      const parent = catCard.dataset.parentSlug;
+      let targetUrl = '/category/' + encodeURIComponent(slug);
+      if (slug === 'Apps' || slug.toLowerCase() === 'apps') {
+        targetUrl = '/category/Apps';
+      } else if (slug === 'Games' || slug.toLowerCase() === 'games') {
+        targetUrl = '/category/Games';
+      } else if (parent === 'Apps' || parent === 'Games') {
+        targetUrl = `/category/${parent}/${encodeURIComponent(slug)}`;
+      }
+      history.pushState({ category: slug, parentSlug: parent }, '', targetUrl);
+      showCategoryDedicatedView(slug, parent);
       return;
     }
 
@@ -613,7 +710,18 @@
       const catName = catBadge.dataset.filterCat;
       const dlg = $('#product-dialog');
       if (dlg) dlg.close();
-      selectCategory(catName, catName);
+      const matched = state.categories.find(c => c.name === catName || c.slug === catName);
+      if (matched) {
+        const parent = matched.parentSlug || (matched.slug === 'Apps' ? '' : matched.slug === 'Games' ? '' : '');
+        let targetUrl = '/category/' + encodeURIComponent(matched.slug);
+        if (matched.slug === 'Apps') targetUrl = '/category/Apps';
+        else if (matched.slug === 'Games') targetUrl = '/category/Games';
+        else if (parent === 'Apps' || parent === 'Games') targetUrl = `/category/${parent}/${encodeURIComponent(matched.slug)}`;
+        history.pushState({ category: matched.slug, parentSlug: parent }, '', targetUrl);
+        showCategoryDedicatedView(matched.slug, parent);
+      } else {
+        selectCategory(catName, catName);
+      }
       return;
     }
 
@@ -721,13 +829,24 @@
   }
 
   /* Dedicated Product Details View */
-  async function showProductDetails(slug) {
+  async function showProductDetails(slug, preloadedPost = null) {
     try {
-      const response = await fetch('/api/products/' + encodeURIComponent(slug));
-      const item = await response.json();
-      if (!response.ok) throw new Error(item.message || 'ما لكينا هالمنتج.');
+      let item = preloadedPost;
+      if (!item) {
+        const response = await fetch('/api/products/' + encodeURIComponent(slug));
+        item = await response.json();
+        if (!response.ok) throw new Error(item.message || 'ما لكينا هالمنتج.');
+      }
 
       document.title = `${item.name} | Store`;
+
+      const isGame = item.type === 'game';
+      const mainCat = isGame ? 'Games' : 'Apps';
+      const identifier = item.packageName || item.slug;
+      const canonicalUrl = item.detailUrl || `/category/${mainCat}/${encodeURIComponent(identifier)}`;
+      if (window.history.replaceState) {
+        history.replaceState({ product: slug, canonical: canonicalUrl }, '', canonicalUrl);
+      }
 
       let dialog = $('#product-dialog');
       if (!dialog) {
@@ -737,7 +856,6 @@
         document.body.appendChild(dialog);
       }
 
-      const isGame = item.type === 'game';
       const typeLabel = isGame ? '🎮 لعبة' : '📱 تطبيق';
       const icon = item.imageUrl
         ? `<img class="detail-app-icon" src="${escapeHtml(item.imageUrl)}" alt="${escapeHtml(item.name)}" onerror="this.src='/Logo.png'">`
@@ -879,7 +997,9 @@
       // Close handlers
       const closeDialog = () => {
         dialog.close();
-        if (location.pathname.startsWith('/product/')) history.pushState({}, '', '/');
+        if (location.pathname.startsWith('/product/') || location.pathname.match(/^\/category\/(Apps|Games)\/[^/]+/i)) {
+          history.pushState({}, '', '/');
+        }
         document.title = 'Store | متجرك الرقمي';
       };
       dialog.querySelector('.dialog-close').addEventListener('click', closeDialog);
@@ -999,13 +1119,22 @@
 
   $('#year').textContent = String(new Date().getFullYear());
 
-  // Popstate Routing
-  window.addEventListener('popstate', (e) => {
-    const path = location.pathname;
+  // Unified Route Resolver
+  function resolveRoute(path) {
     const productMatch = path.match(/^\/product\/([^/]+)/);
+    const catalogSubMatch = path.match(/^\/category\/(Apps|Games)\/([^/]+)/i);
+    const mainCatMatch = path.match(/^\/category\/(Apps|Games)\/?$/i);
     const categoryMatch = path.match(/^\/category\/([^/]+)/);
+
     if (productMatch) {
       showProductDetails(decodeURIComponent(productMatch[1]));
+    } else if (catalogSubMatch) {
+      const mainCat = catalogSubMatch[1].toLowerCase() === 'games' ? 'Games' : 'Apps';
+      const secondPart = decodeURIComponent(catalogSubMatch[2]);
+      resolveCatalogRoute(mainCat, secondPart);
+    } else if (mainCatMatch) {
+      const mainCat = mainCatMatch[1].toLowerCase() === 'games' ? 'Games' : 'Apps';
+      showMainCategoryView(mainCat);
     } else if (categoryMatch) {
       showCategoryDedicatedView(decodeURIComponent(categoryMatch[1]));
     } else if (path === '/categories') {
@@ -1015,6 +1144,11 @@
       if (dialog?.open) dialog.close();
       switchToView('main');
     }
+  }
+
+  // Popstate Routing
+  window.addEventListener('popstate', () => {
+    resolveRoute(location.pathname);
   });
 
   // Initial Boot
@@ -1024,14 +1158,5 @@
   loadShowcaseSections();
   loadProducts();
 
-  const initialPath = location.pathname;
-  const initialProductRoute = initialPath.match(/^\/product\/([^/]+)/);
-  const initialCategoryRoute = initialPath.match(/^\/category\/([^/]+)/);
-  if (initialProductRoute) {
-    showProductDetails(decodeURIComponent(initialProductRoute[1]));
-  } else if (initialCategoryRoute) {
-    showCategoryDedicatedView(decodeURIComponent(initialCategoryRoute[1]));
-  } else if (initialPath === '/categories') {
-    switchToView('categories');
-  }
+  resolveRoute(location.pathname);
 })();

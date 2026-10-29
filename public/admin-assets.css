@@ -270,6 +270,19 @@ tbody tr:hover{background:#fbfdfb}
 .blocks-preview-pane img{max-width:100%;border-radius:10px;margin:8px 0}
 .blocks-preview-pane video{max-width:100%;border-radius:10px}
 
+/* URL Display & Copy Box */
+.url-preview-field{grid-column:1 / -1}
+.url-display-box{
+  display:flex;align-items:center;gap:10px;background:#f6f8f6;border:1px solid var(--line);
+  padding:8px 12px;border-radius:10px;margin-top:6px;direction:ltr;justify-content:space-between;
+}
+.url-display-box code{font-family:monospace;font-size:12px;color:#106b3b;font-weight:700;word-break:break-all}
+.url-copy-btn{font-size:11px;padding:4px 10px;border-radius:6px;cursor:pointer;white-space:nowrap}
+.parent-cat-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:6px;display:inline-block}
+.parent-cat-badge.apps{background:#eaf5ee;color:#106b3b;border:1px solid #c2e2cc}
+.parent-cat-badge.games{background:#fdf3e7;color:#b35f00;border:1px solid #fae1c3}
+.parent-cat-badge.root{background:#f0f2f0;color:#555;border:1px solid #d5dad6}
+
 /* Toast */
 .toast{position:fixed;left:24px;bottom:24px;z-index:200;background:#171a18;color:#fff;padding:13px 18px;border-radius:12px;box-shadow:var(--shadow);font-size:12px;max-width:calc(100% - 48px)}
 

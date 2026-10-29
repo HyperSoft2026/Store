@@ -146,45 +146,67 @@
     <!-- Categories View -->
     <section id="categories-view" hidden>
       <section class="content-panel" style="padding:24px">
-        <h2 id="category-editor-title">إضافة قسم جديد</h2>
+        <h2 id="category-editor-title">إضافة قسم / تصنيف فرعي جديد</h2>
         <form id="category-form">
           <input id="category-id" type="hidden">
           <div class="form-grid">
             <div class="field">
-              <label for="category-name">اسم القسم *</label>
-              <input id="category-name" maxlength="100" required placeholder="مثلاً: أدوات، ألعاب أكشن، تواصل">
+              <label for="category-name">اسم القسم أو التصنيف *</label>
+              <input id="category-name" maxlength="100" required placeholder="مثلاً: أدوات، ألعاب حركة، إنتاجية">
             </div>
             <div class="field">
               <label for="category-slug">الرابط المميز (Slug) *</label>
-              <input id="category-slug" maxlength="180" required placeholder="يُنشأ تلقائياً من الاسم">
+              <input id="category-slug" maxlength="180" required placeholder="يُنشأ تلقائياً من الاسم (مثلاً: Tools أو Action)">
+            </div>
+            <div class="field">
+              <label for="category-parent">القسم الأب (التبعية الهرمية) *</label>
+              <select id="category-parent">
+                <option value="">-- بدون أب (قسم رئيسي مثل Apps / Games) --</option>
+                <option value="Apps">📱 تصنيف فرعي لقسم التطبيقات (Apps)</option>
+                <option value="Games">🎮 تصنيف فرعي لقسم الألعاب (Games)</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="checkbox-label" style="margin-top:28px">
+                <input type="checkbox" id="category-visible" checked>
+                <span>ظاهر في المتجر (نشط وقابل للعرض)</span>
+              </label>
             </div>
             <div class="field full">
               <label for="category-description">وصف القسم</label>
-              <input id="category-description" maxlength="500" placeholder="نبذة توضيحية عن محتوى القسم">
+              <input id="category-description" maxlength="500" placeholder="نبذة توضيحية عن محتوى القسم وتطبيقاته">
             </div>
           </div>
           <p class="notice" id="category-notice" role="alert" hidden></p>
           <footer class="editor-actions">
             <button class="secondary-btn" id="category-cancel" type="button">إلغاء</button>
-            <button class="primary-btn" type="submit">حفظ القسم</button>
+            <button class="primary-btn" type="submit">حفظ القسم / التصنيف</button>
           </footer>
         </form>
       </section>
 
       <div id="categories-notice" class="notice" role="status" hidden></div>
       <section class="content-panel" style="margin-top:20px">
+        <div class="panel-heading">
+          <div>
+            <h2>هيكل الأقسام والتصنيفات الهرمية</h2>
+            <p>يمكنك نسخ روابط الأقسام والتصنيفات مباشرة، وتعديل تبعيتها أو إخفائها.</p>
+          </div>
+        </div>
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>القسم</th>
-                <th>الرابط</th>
-                <th>عدد العناصر</th>
+                <th>القسم / التصنيف</th>
+                <th>القسم الأب</th>
+                <th>رابط المسار في المتجر</th>
+                <th>التطبيقات المرتبطة</th>
+                <th>الحالة</th>
                 <th>إجراءات</th>
               </tr>
             </thead>
             <tbody id="categories-table">
-              <tr><td colspan="4" class="empty-cell">دا نحمل الأقسام...</td></tr>
+              <tr><td colspan="6" class="empty-cell">دا نحمل الأقسام...</td></tr>
             </tbody>
           </table>
         </div>
@@ -212,22 +234,35 @@
       <div class="form-sections">
         <!-- Section 1: Basic App Details -->
         <fieldset class="form-section">
-          <legend>1. المعلومات الأساسية</legend>
+          <legend>1. المعلومات الأساسية والروابط</legend>
           <div class="form-grid">
             <div class="field full">
               <label for="post-title">اسم التطبيق أو اللعبة (العنوان) *</label>
               <input id="post-title" required maxlength="180" placeholder="مثلاً: Telegram Messenger أو Minecraft">
             </div>
             <div class="field">
-              <label for="post-slug">الرابط المميز (Slug يدعم العربية) *</label>
-              <input id="post-slug" required maxlength="180" placeholder="يُنشأ تلقائياً ويمكنك تخصيصه">
+              <label for="post-type">نوع المحتوى (القسم الرئيسي) *</label>
+              <select id="post-type">
+                <option value="app">📱 تطبيق (Application) - تابع لقسم Apps</option>
+                <option value="game">🎮 لعبة (Game) - تابع لقسم Games</option>
+              </select>
             </div>
             <div class="field">
-              <label for="post-type">نوع المحتوى *</label>
-              <select id="post-type">
-                <option value="app">📱 تطبيق (Application)</option>
-                <option value="game">🎮 لعبة (Game)</option>
-              </select>
+              <label for="post-package-name">اسم الحزمة (Android Package Name)</label>
+              <input id="post-package-name" maxlength="200" placeholder="مثلاً: com.example.app">
+              <small class="help-text">صيغة قياسية: com.developer.appname</small>
+            </div>
+            <div class="field full url-preview-field">
+              <label>رابط صفحة العرض المخصص بالمتجر (Canonical URL):</label>
+              <div class="url-display-box">
+                <code id="post-url-preview">/category/Apps/...</code>
+                <button type="button" id="copy-url-btn" class="secondary-btn small-btn">📋 نسخ الرابط</button>
+              </div>
+              <small class="help-text">يمكن للزوار والباحثين الوصول إلى صفحة التطبيق مباشرة عبر هذا الرابط.</small>
+            </div>
+            <div class="field">
+              <label for="post-slug">الرابط المميز البديل (Slug) *</label>
+              <input id="post-slug" required maxlength="180" placeholder="يُنشأ تلقائياً ويمكنك تخصيصه">
             </div>
             <div class="field">
               <label for="post-developer">المطوّر أو الشركة الناشرة</label>
@@ -290,21 +325,26 @@
 
         <!-- Section 3: Multiple Categories -->
         <fieldset class="form-section">
-          <legend>3. الأقسام والتصنيفات المتعددة</legend>
+          <legend>3. الأقسام والتصنيفات المتوافقة مع نوع المحتوى</legend>
           <div class="category-manager">
+            <small class="help-text" id="cat-type-hint">يتم تلقائياً تصفية التصنيفات لتناسب نوع المحتوى المحدد (تطبيقات أو ألعاب).</small>
             <div class="chips-container" id="post-categories-chips">
               <!-- Selected chips rendered here -->
             </div>
             <div class="cat-input-row">
               <div class="autocomplete-wrap">
-                <input id="category-search-input" type="text" autocomplete="off" placeholder="ابحث عن قسم لإضافته...">
+                <input id="category-search-input" type="text" autocomplete="off" placeholder="ابحث عن تصنيف فرعي لإضافته...">
                 <div id="category-autocomplete-list" class="autocomplete-dropdown" hidden></div>
               </div>
-              <button type="button" id="inline-add-cat-btn" class="secondary-btn small-btn">＋ إضافة قسم جديد</button>
+              <button type="button" id="inline-add-cat-btn" class="secondary-btn small-btn">＋ إضافة تصنيف فرعي جديد</button>
             </div>
             <!-- Quick Inline Category Creator -->
             <div id="inline-cat-box" class="inline-cat-box" hidden>
-              <input id="inline-cat-name" placeholder="اسم القسم الجديد...">
+              <input id="inline-cat-name" placeholder="اسم التصنيف الجديد...">
+              <select id="inline-cat-parent">
+                <option value="Apps">📱 تصنيف لتطبيقات Apps</option>
+                <option value="Games">🎮 تصنيف لألعاب Games</option>
+              </select>
               <button type="button" id="inline-cat-save" class="primary-btn small-btn">حفظ وإضافة</button>
               <button type="button" id="inline-cat-cancel" class="secondary-btn small-btn">إلغاء</button>
             </div>

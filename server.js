@@ -80,6 +80,15 @@ function parsePost(body) {
   const cover = adminText(body.coverImage || body.cover, 1500);
   const iconUrl = adminText(body.iconUrl || body.imageUrl || body.icon, 1500);
   const type = body.type === 'game' ? 'game' : 'app';
+  const rawPkg = adminText(body.packageName || body.package_name, 255).trim();
+  let packageName = '';
+  if (rawPkg) {
+    packageName = rawPkg.toLowerCase();
+    const pkgRegex = /^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$/;
+    if (!pkgRegex.test(packageName)) {
+      return { error: 'اسم الحزمة (Package Name) غير صالح. يجب أن يبدأ بحرف ويحتوي على نقطة واحدة على الأقل، مثل: com.example.app' };
+    }
+  }
   const developer = adminText(body.developer, 180);
   const version = adminText(body.version, 80);
   const fileSize = adminText(body.fileSize, 80);
@@ -139,7 +148,7 @@ function parsePost(body) {
   }
 
   return { post: {
-    title, slug, excerpt: adminText(body.excerpt || body.shortDescription, 500),
+    title, slug, packageName, excerpt: adminText(body.excerpt || body.shortDescription, 500),
     content: adminText(body.content || body.description, 50000),
     contentBlocks, cover, iconUrl, type, category: primaryCategory, categories,
     screenshots, downloadUrl, apkFileUrl, version, fileSize, developer,
@@ -162,12 +171,17 @@ function publicPost(row) {
   } catch {}
 
   const ratingVal = row.rating == null ? null : Number(row.rating);
+  const mainCategory = row.type === 'game' ? 'Games' : 'Apps';
+  const slugOrPkg = row.package_name || row.slug;
 
   return {
     id: row.id,
     title: row.title,
     name: row.title,
     slug: row.slug,
+    packageName: row.package_name || '',
+    mainCategory,
+    detailUrl: `/category/${mainCategory}/${encodeURIComponent(slugOrPkg)}`,
     excerpt: row.excerpt,
     shortDescription: row.excerpt,
     content: row.content,
@@ -297,6 +311,9 @@ async function initializeDatabase() {
     await client.query("ALTER TABLE store_posts ADD COLUMN IF NOT EXISTS rating NUMERIC(2,1) CHECK (rating IS NULL OR (rating >= 0 AND rating <= 5))");
     await client.query("ALTER TABLE store_posts ADD COLUMN IF NOT EXISTS is_featured BOOLEAN NOT NULL DEFAULT FALSE");
     await client.query("ALTER TABLE store_posts ADD COLUMN IF NOT EXISTS downloads BIGINT NOT NULL DEFAULT 0");
+    await client.query("ALTER TABLE store_categories ADD COLUMN IF NOT EXISTS parent_slug TEXT NOT NULL DEFAULT ''");
+    await client.query("ALTER TABLE store_categories ADD COLUMN IF NOT EXISTS is_visible BOOLEAN NOT NULL DEFAULT TRUE");
+    await client.query("ALTER TABLE store_posts ADD COLUMN IF NOT EXISTS package_name TEXT NOT NULL DEFAULT ''");
     await client.query('CREATE INDEX IF NOT EXISTS store_admin_sessions_expiry_idx ON store_admin_sessions (expires_at)');
     await client.query(`
       CREATE TABLE IF NOT EXISTS store_admin_attempts (
@@ -310,10 +327,24 @@ async function initializeDatabase() {
     await client.query('CREATE INDEX IF NOT EXISTS store_posts_type_idx ON store_posts (status, type, created_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS store_posts_featured_idx ON store_posts (status, is_featured, created_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS store_posts_downloads_idx ON store_posts (status, downloads DESC)');
+    await client.query('CREATE INDEX IF NOT EXISTS store_posts_pkg_idx ON store_posts (package_name)');
+    await client.query('CREATE INDEX IF NOT EXISTS store_posts_type_pkg_idx ON store_posts (type, package_name)');
+    await client.query('CREATE INDEX IF NOT EXISTS store_categories_parent_idx ON store_categories (parent_slug)');
     await client.query('CREATE INDEX IF NOT EXISTS store_products_published_idx ON store_products (is_published, is_featured, created_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS store_products_category_idx ON store_products (category_id)');
     await client.query('CREATE INDEX IF NOT EXISTS store_products_type_idx ON store_products (is_published, type, created_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS store_products_downloads_idx ON store_products (is_published, downloads DESC)');
+    // Seed main categories Apps and Games if they do not exist
+    await client.query(`
+      INSERT INTO store_categories (name, slug, description, parent_slug, is_visible)
+      VALUES ('تطبيقات', 'Apps', 'قسم تطبيقات Android', '', TRUE)
+      ON CONFLICT (slug) DO UPDATE SET is_visible = TRUE
+    `);
+    await client.query(`
+      INSERT INTO store_categories (name, slug, description, parent_slug, is_visible)
+      VALUES ('ألعاب', 'Games', 'قسم ألعاب Android', '', TRUE)
+      ON CONFLICT (slug) DO UPDATE SET is_visible = TRUE
+    `);
     await client.query('COMMIT');
     databaseReady = true;
     databaseError = null;
@@ -408,11 +439,15 @@ app.get('/api/config', (req, res) => {
 app.get('/api/categories', requireDatabase, async (req, res, next) => {
   try {
     const result = await pool.query(`
-      SELECT c.id, c.name, c.slug, c.description, c.icon, COUNT(p.id)::int AS product_count
+      SELECT c.id, c.name, c.slug, c.description, c.icon, c.parent_slug AS "parentSlug", c.is_visible AS "isVisible",
+             (
+               (SELECT COUNT(*)::int FROM store_posts sp WHERE sp.status = 'published' AND (sp.category = c.name OR sp.categories ILIKE '%' || c.name || '%'))
+               +
+               (SELECT COUNT(*)::int FROM store_products p WHERE p.is_published = TRUE AND p.category_id = c.id)
+             ) AS product_count
       FROM store_categories c
-      LEFT JOIN store_products p ON p.category_id = c.id AND p.is_published = TRUE
-      GROUP BY c.id
-      ORDER BY c.name ASC
+      WHERE c.is_visible = TRUE
+      ORDER BY c.parent_slug ASC, c.name ASC
     `);
     res.json(result.rows);
   } catch (error) { next(error); }
@@ -422,11 +457,14 @@ app.get('/api/categories/:slug', requireDatabase, async (req, res, next) => {
   try {
     const slug = String(req.params.slug).slice(0, 160);
     const result = await pool.query(`
-      SELECT c.id, c.name, c.slug, c.description, c.icon, COUNT(p.id)::int AS product_count
+      SELECT c.id, c.name, c.slug, c.description, c.icon, c.parent_slug AS "parentSlug", c.is_visible AS "isVisible",
+             (
+               (SELECT COUNT(*)::int FROM store_posts sp WHERE sp.status = 'published' AND (sp.category = c.name OR sp.categories ILIKE '%' || c.name || '%'))
+               +
+               (SELECT COUNT(*)::int FROM store_products p WHERE p.is_published = TRUE AND p.category_id = c.id)
+             ) AS product_count
       FROM store_categories c
-      LEFT JOIN store_products p ON p.category_id = c.id AND p.is_published = TRUE
       WHERE c.slug = $1
-      GROUP BY c.id
       LIMIT 1
     `, [slug]);
     if (!result.rowCount) return res.status(404).json({ error: 'not_found', message: 'القسم غير موجود.' });
@@ -514,17 +552,17 @@ app.get('/api/products', requireDatabase, async (req, res, next) => {
 app.get('/api/products/:slug', requireDatabase, async (req, res, next) => {
   try {
     const slug = String(req.params.slug).slice(0, 160);
+    const postResult = await pool.query(
+      "SELECT * FROM store_posts WHERE (slug = $1 OR package_name = $1) AND status = 'published' LIMIT 1",
+      [slug]
+    );
+    if (postResult.rowCount) return res.json(publicPost(postResult.rows[0]));
+
     const result = await pool.query(
       `${PRODUCT_SELECT} WHERE p.slug = $1 AND p.is_published = TRUE LIMIT 1`,
       [slug]
     );
     if (result.rowCount) return res.json(safeProduct(result.rows[0]));
-
-    const postResult = await pool.query(
-      "SELECT * FROM store_posts WHERE slug = $1 AND status = 'published' LIMIT 1",
-      [slug]
-    );
-    if (postResult.rowCount) return res.json(publicPost(postResult.rows[0]));
 
     res.status(404).json({ error: 'not_found', message: 'ما لكينا هالمنتج.' });
   } catch (error) { next(error); }
@@ -536,7 +574,7 @@ app.get('/api/products/:slug/related', requireDatabase, async (req, res, next) =
     const current = await pool.query('SELECT id, category_id, type FROM store_products WHERE slug = $1 AND is_published = TRUE LIMIT 1', [slug]);
     let row = current.rows[0];
     if (!row) {
-      const postCur = await pool.query("SELECT id, category, type FROM store_posts WHERE slug = $1 AND status = 'published' LIMIT 1", [slug]);
+      const postCur = await pool.query("SELECT id, category, type FROM store_posts WHERE (slug = $1 OR package_name = $1) AND status = 'published' LIMIT 1", [slug]);
       if (!postCur.rowCount) return res.status(404).json({ error: 'not_found', message: 'ما لكينا هالمنتج.' });
       row = { id: postCur.rows[0].id, category_id: null, type: postCur.rows[0].type };
     }
@@ -554,7 +592,7 @@ app.post('/api/products/:slug/download', requireDatabase, async (req, res, next)
   try {
     const slug = String(req.params.slug).slice(0, 160);
     const postRes = await pool.query(
-      "UPDATE store_posts SET downloads = downloads + 1 WHERE slug = $1 AND status = 'published' AND (download_url <> '' OR apk_file_url <> '') RETURNING download_url, apk_file_url",
+      "UPDATE store_posts SET downloads = downloads + 1 WHERE (slug = $1 OR package_name = $1) AND status = 'published' AND (download_url <> '' OR apk_file_url <> '') RETURNING download_url, apk_file_url",
       [slug]
     );
     if (postRes.rowCount) {
@@ -619,12 +657,178 @@ app.post('/api/posts/:slug/download', requireDatabase, async (req, res, next) =>
   try {
     const slug = String(req.params.slug).slice(0, 160);
     const result = await pool.query(
-      "UPDATE store_posts SET downloads = downloads + 1 WHERE slug = $1 AND status = 'published' AND (download_url <> '' OR apk_file_url <> '') RETURNING download_url, apk_file_url",
+      "UPDATE store_posts SET downloads = downloads + 1 WHERE (slug = $1 OR package_name = $1) AND status = 'published' AND (download_url <> '' OR apk_file_url <> '') RETURNING download_url, apk_file_url",
       [slug]
     );
     if (!result.rowCount) return res.status(404).json({ error: 'download_unavailable', message: 'التنزيل لهذا التطبيق مو متوفر حالياً.' });
     const row = result.rows[0];
     res.json({ url: row.download_url || row.apk_file_url });
+  } catch (error) { next(error); }
+});
+
+/* Unified Catalog & Hierarchical Category Routes */
+app.get('/api/catalog/:mainCat', requireDatabase, async (req, res, next) => {
+  try {
+    const rawMain = String(req.params.mainCat || '').trim();
+    const isGame = rawMain.toLowerCase() === 'games' || rawMain === 'ألعاب';
+    const isApp = rawMain.toLowerCase() === 'apps' || rawMain === 'تطبيقات';
+    if (!isGame && !isApp) {
+      return res.status(404).json({ error: 'not_found', message: 'القسم الرئيسي غير موجود.' });
+    }
+    const mainSlug = isGame ? 'Games' : 'Apps';
+    const mainType = isGame ? 'game' : 'app';
+
+    // Get main category details
+    const mainCatRes = await pool.query('SELECT id, name, slug, description, icon FROM store_categories WHERE slug = $1 LIMIT 1', [mainSlug]);
+    const mainCategory = mainCatRes.rows[0] || { name: isGame ? 'الألعاب' : 'التطبيقات', slug: mainSlug, description: '' };
+
+    // Get visible subcategories belonging to this main category
+    const subcatsRes = await pool.query(`
+      SELECT c.id, c.name, c.slug, c.description, c.icon, c.parent_slug AS "parentSlug",
+             (
+               (SELECT COUNT(*)::int FROM store_posts sp WHERE sp.status = 'published' AND sp.type = $1 AND (sp.category = c.name OR sp.categories ILIKE '%' || c.name || '%'))
+               +
+               (SELECT COUNT(*)::int FROM store_products p WHERE p.is_published = TRUE AND p.category_id = c.id)
+             ) AS post_count
+      FROM store_categories c
+      WHERE c.parent_slug ILIKE $2 AND c.is_visible = TRUE
+      ORDER BY c.name ASC
+    `, [mainType, mainSlug]);
+
+    // Query parameters for posts
+    const search = String(req.query.q || '').trim().slice(0, 100);
+    const subcat = String(req.query.subcat || req.query.category || '').trim().slice(0, 100);
+    const sort = String(req.query.sort || '').trim().toLowerCase();
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 24, 1), 60);
+    const offset = Math.max(Number.parseInt(req.query.offset, 10) || 0, 0);
+
+    const values = [mainType];
+    const where = ["status = 'published'", "type = $1"];
+
+    if (search) {
+      values.push(`%${search.replace(/[\\%_]/g, '\\$&')}%`);
+      const idx = values.length;
+      where.push(`(title ILIKE $${idx} OR excerpt ILIKE $${idx} OR developer ILIKE $${idx} OR package_name ILIKE $${idx})`);
+    }
+    if (subcat) {
+      values.push(subcat);
+      const idx = values.length;
+      where.push(`(category = $${idx} OR categories ILIKE '%' || $${idx} || '%')`);
+    }
+
+    let orderBy = 'is_featured DESC, published_at DESC NULLS LAST, created_at DESC';
+    if (sort === 'downloads') orderBy = 'downloads DESC, created_at DESC';
+    else if (sort === 'rating') orderBy = 'rating DESC NULLS LAST, created_at DESC';
+    else if (sort === 'newest') orderBy = 'created_at DESC';
+
+    const countRes = await pool.query(`SELECT COUNT(*)::int AS total FROM store_posts WHERE ${where.join(' AND ')}`, values);
+    const total = countRes.rows[0].total;
+
+    values.push(limit, offset);
+    const postsRes = await pool.query(`
+      SELECT * FROM store_posts
+      WHERE ${where.join(' AND ')}
+      ORDER BY ${orderBy}
+      LIMIT $${values.length - 1} OFFSET $${values.length}
+    `, values);
+
+    res.json({
+      mainCategory,
+      subcategories: subcatsRes.rows,
+      items: postsRes.rows.map(publicPost),
+      total,
+      limit,
+      offset
+    });
+  } catch (error) { next(error); }
+});
+
+app.get('/api/catalog/:mainCat/:secondPart', requireDatabase, async (req, res, next) => {
+  try {
+    const rawMain = String(req.params.mainCat || '').trim();
+    const isGame = rawMain.toLowerCase() === 'games' || rawMain === 'ألعاب';
+    const isApp = rawMain.toLowerCase() === 'apps' || rawMain === 'تطبيقات';
+    if (!isGame && !isApp) {
+      return res.status(404).json({ error: 'not_found', message: 'القسم الرئيسي غير موجود.' });
+    }
+    const mainSlug = isGame ? 'Games' : 'Apps';
+    const mainType = isGame ? 'game' : 'app';
+    const secondPart = String(req.params.secondPart || '').trim();
+
+    // 1. Check if secondPart is a subcategory of mainSlug
+    const subcatRes = await pool.query(`
+      SELECT id, name, slug, description, icon, parent_slug AS "parentSlug", is_visible AS "isVisible"
+      FROM store_categories
+      WHERE (slug ILIKE $1 OR name ILIKE $1) AND parent_slug ILIKE $2 AND is_visible = TRUE
+      LIMIT 1
+    `, [secondPart, mainSlug]);
+
+    if (subcatRes.rowCount) {
+      const subcategory = subcatRes.rows[0];
+      const search = String(req.query.q || '').trim().slice(0, 100);
+      const sort = String(req.query.sort || '').trim().toLowerCase();
+      const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 24, 1), 60);
+      const offset = Math.max(Number.parseInt(req.query.offset, 10) || 0, 0);
+
+      const values = [mainType, subcategory.name];
+      const where = ["status = 'published'", "type = $1", "(category = $2 OR categories ILIKE '%' || $2 || '%')"];
+
+      if (search) {
+        values.push(`%${search.replace(/[\\%_]/g, '\\$&')}%`);
+        const idx = values.length;
+        where.push(`(title ILIKE $${idx} OR excerpt ILIKE $${idx} OR developer ILIKE $${idx} OR package_name ILIKE $${idx})`);
+      }
+
+      let orderBy = 'is_featured DESC, published_at DESC NULLS LAST, created_at DESC';
+      if (sort === 'downloads') orderBy = 'downloads DESC, created_at DESC';
+      else if (sort === 'rating') orderBy = 'rating DESC NULLS LAST, created_at DESC';
+      else if (sort === 'newest') orderBy = 'created_at DESC';
+
+      const countRes = await pool.query(`SELECT COUNT(*)::int AS total FROM store_posts WHERE ${where.join(' AND ')}`, values);
+      values.push(limit, offset);
+      const itemsRes = await pool.query(`SELECT * FROM store_posts WHERE ${where.join(' AND ')} ORDER BY ${orderBy} LIMIT $${values.length - 1} OFFSET $${values.length}`, values);
+
+      return res.json({
+        type: 'subcategory',
+        mainCategory: mainSlug,
+        subcategory,
+        items: itemsRes.rows.map(publicPost),
+        total: countRes.rows[0].total
+      });
+    }
+
+    // 2. Check if secondPart is an App or Game detail item
+    const postRes = await pool.query(`
+      SELECT * FROM store_posts
+      WHERE (package_name = $1 OR slug = $1) AND type = $2 AND status = 'published'
+      LIMIT 1
+    `, [secondPart, mainType]);
+
+    if (postRes.rowCount) {
+      return res.json({
+        type: 'post',
+        mainCategory: mainSlug,
+        item: publicPost(postRes.rows[0])
+      });
+    }
+
+    // 3. Fallback: check legacy store_products table
+    const prodRes = await pool.query(`
+      ${PRODUCT_SELECT}
+      WHERE p.slug = $1 AND p.type = $2 AND p.is_published = TRUE
+      LIMIT 1
+    `, [secondPart, mainType]);
+
+    if (prodRes.rowCount) {
+      return res.json({
+        type: 'post',
+        mainCategory: mainSlug,
+        item: safeProduct(prodRes.rows[0])
+      });
+    }
+
+    // 4. Not found
+    return res.status(404).json({ error: 'not_found', message: 'لم يتم العثور على التطبيق أو القسم المطلوب.' });
   } catch (error) { next(error); }
 });
 
@@ -696,13 +900,33 @@ function parseProduct(body) {
 }
 function parseCategory(body) {
   const name = adminText(body.name, 100);
-  const slug = adminSlug(body.slug || name);
+  const rawSlug = adminText(body.slug || name, 180);
+  let slug = rawSlug;
+  if (rawSlug !== 'Apps' && rawSlug !== 'Games') {
+    slug = adminSlug(rawSlug);
+  }
+  let parentSlug = adminText(body.parentSlug || body.parent_slug, 50);
+  if (parentSlug.toLowerCase() === 'apps') parentSlug = 'Apps';
+  else if (parentSlug.toLowerCase() === 'games') parentSlug = 'Games';
+  else parentSlug = '';
+
+  const isVisible = body.isVisible !== undefined ? Boolean(body.isVisible) : (body.is_visible !== undefined ? Boolean(body.is_visible) : true);
+
   if (!name || !slug) return { error: 'اسم القسم ورابطه مطلوبان.' };
-  return { category: { name, slug, description: adminText(body.description, 500) } };
+  return { category: { name, slug, parentSlug, isVisible, description: adminText(body.description, 500) } };
 }
 app.get('/api/admin/categories', requireDatabase, requireAdmin, async (req, res, next) => {
   try {
-    const result = await pool.query('SELECT c.id,c.name,c.slug,c.description,c.icon,c.created_at,COUNT(p.id)::int AS product_count FROM store_categories c LEFT JOIN store_products p ON p.category_id=c.id GROUP BY c.id ORDER BY c.name');
+    const result = await pool.query(`
+      SELECT c.id, c.name, c.slug, c.description, c.icon, c.parent_slug AS "parentSlug", c.is_visible AS "isVisible", c.created_at,
+             (
+               (SELECT COUNT(*)::int FROM store_posts sp WHERE (sp.category = c.name OR sp.categories ILIKE '%' || c.name || '%'))
+               +
+               (SELECT COUNT(*)::int FROM store_products p WHERE p.category_id = c.id)
+             ) AS product_count
+      FROM store_categories c
+      ORDER BY c.parent_slug ASC, c.name ASC
+    `);
     res.json({ items: result.rows });
   } catch (error) { next(error); }
 });
@@ -711,7 +935,10 @@ app.post('/api/admin/categories', requireDatabase, requireAdmin, requireAdminCsr
   if (parsed.error) return res.status(400).json({ message: parsed.error });
   try {
     const c = parsed.category;
-    const result = await pool.query('INSERT INTO store_categories(name,slug,description) VALUES($1,$2,$3) RETURNING *', [c.name,c.slug,c.description]);
+    const result = await pool.query(
+      'INSERT INTO store_categories(name, slug, description, parent_slug, is_visible) VALUES($1, $2, $3, $4, $5) RETURNING id, name, slug, description, icon, parent_slug AS "parentSlug", is_visible AS "isVisible", created_at',
+      [c.name, c.slug, c.description, c.parentSlug, c.isVisible]
+    );
     res.status(201).json({ item: result.rows[0] });
   } catch (error) { if (error.code === '23505') return res.status(409).json({ message: 'اسم القسم أو رابطه مستخدم مسبقاً.' }); next(error); }
 });
@@ -720,16 +947,37 @@ app.put('/api/admin/categories/:id', requireDatabase, requireAdmin, requireAdmin
   if (parsed.error) return res.status(400).json({ message: parsed.error });
   try {
     const c = parsed.category;
-    const result = await pool.query('UPDATE store_categories SET name=$1,slug=$2,description=$3 WHERE id=$4 RETURNING *', [c.name,c.slug,c.description,req.params.id]);
+    const result = await pool.query(
+      'UPDATE store_categories SET name=$1, slug=$2, description=$3, parent_slug=$4, is_visible=$5 WHERE id=$6 RETURNING id, name, slug, description, icon, parent_slug AS "parentSlug", is_visible AS "isVisible", created_at',
+      [c.name, c.slug, c.description, c.parentSlug, c.isVisible, req.params.id]
+    );
     if (!result.rowCount) return res.status(404).json({ message: 'القسم غير موجود.' });
     res.json({ item: result.rows[0] });
   } catch (error) { if (error.code === '23505') return res.status(409).json({ message: 'اسم القسم أو رابطه مستخدم مسبقاً.' }); next(error); }
 });
 app.delete('/api/admin/categories/:id', requireDatabase, requireAdmin, requireAdminCsrf, async (req, res, next) => {
   try {
-    const result = await pool.query('DELETE FROM store_categories WHERE id=$1 RETURNING id', [req.params.id]);
-    if (!result.rowCount) return res.status(404).json({ message: 'القسم غير موجود.' });
-    res.json({ ok: true });
+    const catRes = await pool.query('SELECT id, name, slug, parent_slug FROM store_categories WHERE id=$1', [req.params.id]);
+    if (!catRes.rowCount) return res.status(404).json({ message: 'القسم غير موجود.' });
+    const c = catRes.rows[0];
+    if ((c.slug === 'Apps' || c.slug === 'Games') && !c.parent_slug) {
+      return res.status(400).json({ message: 'لا يمكن حذف الأقسام الرئيسية الأساسية (Apps / Games).' });
+    }
+    const linked = await pool.query("SELECT COUNT(*)::int AS count FROM store_posts WHERE category = $1 OR categories ILIKE '%' || $1 || '%'", [c.name]);
+    const count = linked.rows[0].count;
+    const force = req.query.force === 'true' || req.body?.force === true;
+    if (count > 0 && !force) {
+      return res.status(409).json({
+        error: 'posts_linked',
+        count,
+        message: `هذا القسم مرتبط بـ ${count} تطبيق أو لعبة. عند التأكيد سيتم فك الارتباط دون حذف التطبيقات.`
+      });
+    }
+    if (count > 0 && force) {
+      await pool.query("UPDATE store_posts SET category='' WHERE category=$1", [c.name]);
+    }
+    await pool.query('DELETE FROM store_categories WHERE id=$1', [req.params.id]);
+    res.json({ ok: true, unlinkedCount: count });
   } catch (error) { next(error); }
 });
 app.get('/api/admin/products', requireDatabase, requireAdmin, async (req, res, next) => {
@@ -835,12 +1083,29 @@ app.post('/api/admin/posts', requireDatabase, requireAdmin, requireAdminCsrf, as
   if (parsed.error) return res.status(400).json({ message: parsed.error });
   const p = parsed.post;
   try {
+    if (p.packageName) {
+      const existingPkg = await pool.query('SELECT id, title FROM store_posts WHERE package_name = $1 LIMIT 1', [p.packageName]);
+      if (existingPkg.rowCount) {
+        return res.status(409).json({ message: `اسم الحزمة «${p.packageName}» مستخدم بالفعل في تطبيق آخر: «${existingPkg.rows[0].title}».` });
+      }
+    }
+    let selectedCats = [];
+    try { selectedCats = JSON.parse(p.categories || '[]'); } catch {}
+    if (selectedCats.length > 0) {
+      const catCheck = await pool.query('SELECT name, parent_slug FROM store_categories WHERE name = ANY($1::text[])', [selectedCats]);
+      const forbiddenParent = p.type === 'app' ? 'Games' : 'Apps';
+      const invalid = catCheck.rows.filter(r => r.parent_slug && r.parent_slug.toLowerCase() === forbiddenParent.toLowerCase());
+      if (invalid.length > 0) {
+        return res.status(400).json({ message: `لا يمكن تعيين تصنيف «${invalid[0].name}» لأن هذا التصنيف تابع لقسم ${forbiddenParent === 'Games' ? 'الألعاب' : 'التطبيقات'}.` });
+      }
+    }
+
     const result = await pool.query(
       `INSERT INTO store_posts
-       (title, slug, excerpt, content, content_blocks, cover_image, icon_url, type, category, categories, screenshots, download_url, apk_file_url, version, file_size, developer, rating, is_featured, status, published_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, CASE WHEN $19='published' THEN NOW() ELSE NULL END)
+       (title, slug, package_name, excerpt, content, content_blocks, cover_image, icon_url, type, category, categories, screenshots, download_url, apk_file_url, version, file_size, developer, rating, is_featured, status, published_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, CASE WHEN $20='published' THEN NOW() ELSE NULL END)
        RETURNING *`,
-      [p.title, p.slug, p.excerpt, p.content, p.contentBlocks, p.cover, p.iconUrl, p.type, p.category, p.categories, p.screenshots, p.downloadUrl, p.apkFileUrl, p.version, p.fileSize, p.developer, p.rating, p.isFeatured, p.status]
+      [p.title, p.slug, p.packageName, p.excerpt, p.content, p.contentBlocks, p.cover, p.iconUrl, p.type, p.category, p.categories, p.screenshots, p.downloadUrl, p.apkFileUrl, p.version, p.fileSize, p.developer, p.rating, p.isFeatured, p.status]
     );
     res.status(201).json({ item: publicPost(result.rows[0]) });
   } catch (error) {
@@ -854,15 +1119,32 @@ app.put('/api/admin/posts/:id', requireDatabase, requireAdmin, requireAdminCsrf,
   if (parsed.error) return res.status(400).json({ message: parsed.error });
   const p = parsed.post;
   try {
+    if (p.packageName) {
+      const existingPkg = await pool.query('SELECT id, title FROM store_posts WHERE package_name = $1 AND id <> $2 LIMIT 1', [p.packageName, req.params.id]);
+      if (existingPkg.rowCount) {
+        return res.status(409).json({ message: `اسم الحزمة «${p.packageName}» مستخدم بالفعل في تطبيق آخر: «${existingPkg.rows[0].title}».` });
+      }
+    }
+    let selectedCats = [];
+    try { selectedCats = JSON.parse(p.categories || '[]'); } catch {}
+    if (selectedCats.length > 0) {
+      const catCheck = await pool.query('SELECT name, parent_slug FROM store_categories WHERE name = ANY($1::text[])', [selectedCats]);
+      const forbiddenParent = p.type === 'app' ? 'Games' : 'Apps';
+      const invalid = catCheck.rows.filter(r => r.parent_slug && r.parent_slug.toLowerCase() === forbiddenParent.toLowerCase());
+      if (invalid.length > 0) {
+        return res.status(400).json({ message: `لا يمكن تعيين تصنيف «${invalid[0].name}» لأن هذا التصنيف تابع لقسم ${forbiddenParent === 'Games' ? 'الألعاب' : 'التطبيقات'}.` });
+      }
+    }
+
     const result = await pool.query(
       `UPDATE store_posts SET
-       title=$1, slug=$2, excerpt=$3, content=$4, content_blocks=$5, cover_image=$6, icon_url=$7,
-       type=$8, category=$9, categories=$10, screenshots=$11, download_url=$12, apk_file_url=$13,
-       version=$14, file_size=$15, developer=$16, rating=$17, is_featured=$18, status=$19,
-       published_at=CASE WHEN $19='published' THEN COALESCE(published_at,NOW()) ELSE NULL END,
+       title=$1, slug=$2, package_name=$3, excerpt=$4, content=$5, content_blocks=$6, cover_image=$7, icon_url=$8,
+       type=$9, category=$10, categories=$11, screenshots=$12, download_url=$13, apk_file_url=$14,
+       version=$15, file_size=$16, developer=$17, rating=$18, is_featured=$19, status=$20,
+       published_at=CASE WHEN $20='published' THEN COALESCE(published_at,NOW()) ELSE NULL END,
        updated_at=NOW()
-       WHERE id=$20 RETURNING *`,
-      [p.title, p.slug, p.excerpt, p.content, p.contentBlocks, p.cover, p.iconUrl, p.type, p.category, p.categories, p.screenshots, p.downloadUrl, p.apkFileUrl, p.version, p.fileSize, p.developer, p.rating, p.isFeatured, p.status, req.params.id]
+       WHERE id=$21 RETURNING *`,
+      [p.title, p.slug, p.packageName, p.excerpt, p.content, p.contentBlocks, p.cover, p.iconUrl, p.type, p.category, p.categories, p.screenshots, p.downloadUrl, p.apkFileUrl, p.version, p.fileSize, p.developer, p.rating, p.isFeatured, p.status, req.params.id]
     );
     if (!result.rowCount) return res.status(404).json({ message: 'المشاركة مو موجودة.' });
     res.json({ item: publicPost(result.rows[0]) });
@@ -887,6 +1169,35 @@ if (ADMIN_PATH) {
 } else {
   console.error('[admin] ADMIN_LINK is missing or invalid; admin route disabled');
 }
+
+/* Legacy product route redirect: 301 to new canonical /category/:mainCat/:packageNameOrSlug */
+app.get('/product/:slug', async (req, res, next) => {
+  try {
+    const slug = String(req.params.slug).slice(0, 160);
+    if (pool && databaseReady) {
+      const postRes = await pool.query("SELECT slug, package_name, type FROM store_posts WHERE (slug = $1 OR package_name = $1) LIMIT 1", [slug]);
+      if (postRes.rowCount) {
+        const row = postRes.rows[0];
+        const mainCat = row.type === 'game' ? 'Games' : 'Apps';
+        const target = `/category/${mainCat}/${encodeURIComponent(row.package_name || row.slug)}`;
+        return res.redirect(301, target);
+      }
+      const prodRes = await pool.query("SELECT slug, type FROM store_products WHERE slug = $1 LIMIT 1", [slug]);
+      if (prodRes.rowCount) {
+        const row = prodRes.rows[0];
+        const mainCat = row.type === 'game' ? 'Games' : 'Apps';
+        const target = `/category/${mainCat}/${encodeURIComponent(row.slug)}`;
+        return res.redirect(301, target);
+      }
+    }
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  } catch (error) { next(error); }
+});
+
+/* SPA routes for Category views */
+app.get(['/category/:mainCat', '/category/:mainCat/:secondPart', '/categories'], (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 app.use(express.static(path.join(__dirname, 'public'), {
   extensions: ['html'],

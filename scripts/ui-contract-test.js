@@ -57,5 +57,13 @@ assert.match(app, /class="product-rating"/, 'product cards should show the ratin
 assert.match(app, /class="rating-star"/, 'product cards should render five fractional-fill stars');
 assert.ok(app.includes('<h3 class="product-title"><a href="/product/${slug}"'), 'product title should link to details');
 assert.match(styles, /product-image-wrap\{flex:0 0 124px/, 'product icon should occupy the RTL right-hand column');
-assert.match(admin, /id="post-rating"/, 'admin should provide an optional rating field in post form');
-console.log('UI contract tests passed: private admin route, hamburger drawer, unified post publishing, theme, detail navigation, database ratings and responsive product rows.');
+assert.match(admin, /id="post-package-name"/, 'admin post form should support package name');
+assert.match(admin, /id="copy-url-btn"/, 'admin post form should provide copy URL button');
+assert.match(admin, /id="post-url-preview"/, 'admin post form should provide live URL preview');
+assert.match(admin, /id="category-parent"/, 'admin category form should support parent category');
+assert.match(server, /parent_slug TEXT NOT NULL DEFAULT ''/, 'categories table should support hierarchical parent slug');
+assert.match(server, /package_name TEXT NOT NULL DEFAULT ''/, 'posts table should support package name');
+assert.match(server, /\/api\/catalog\/:mainCat\/:secondPart/, 'server should provide catalog route for Apps and Games');
+assert.match(server, /301/, 'legacy product routes should redirect permanently');
+console.log('UI contract tests passed: private admin route, hamburger drawer, unified post publishing, theme, detail navigation, database ratings, category hierarchy, package name routing and live URL copying.');
+

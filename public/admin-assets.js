@@ -17,7 +17,8 @@ const state = {
   selectedCategories: [],
   screenshots: [],
   blocks: [],
-  apkUrl: ''
+  apkUrl: '',
+  isDirty: false
 };
 
 const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -206,28 +207,69 @@ function renderCategoriesTable() {
   const tbody = $('#categories-table');
   if (!tbody) return;
   if (!state.categories.length) {
-    tbody.innerHTML = '<tr><td colspan="4" class="empty-cell">ماكو أقسام بعد. أضف أول قسم من النموذج أعلاه.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="6" class="empty-cell">ماكو أقسام بعد. أضف أول قسم من النموذج أعلاه.</td></tr>';
     return;
   }
-  tbody.innerHTML = state.categories.map(c => `
-    <tr>
-      <td><strong>${esc(c.name)}</strong><br><small>${esc(c.description || '')}</small></td>
-      <td><code>${esc(c.slug)}</code></td>
-      <td>${esc(c.product_count || 0)}</td>
-      <td>
-        <div class="row-actions">
-          <button data-cat-edit="${esc(c.id)}">تعديل</button>
-          <button class="delete-btn" data-cat-delete="${esc(c.id)}">حذف</button>
-        </div>
-      </td>
-    </tr>
-  `).join('');
+
+  // Sort categories: Main categories first, then Apps subcategories, then Games subcategories
+  const sorted = [...state.categories].sort((a, b) => {
+    const pA = a.parentSlug || '';
+    const pB = b.parentSlug || '';
+    if (pA === pB) return a.name.localeCompare(b.name, 'ar');
+    if (!pA) return -1;
+    if (!pB) return 1;
+    return pA.localeCompare(pB);
+  });
+
+  tbody.innerHTML = sorted.map(c => {
+    const parent = c.parentSlug || '';
+    let parentBadge = '<span class="parent-cat-badge root">◈ رئيسي</span>';
+    let urlPath = `/category/${esc(c.slug)}`;
+    if (parent === 'Apps') {
+      parentBadge = '<span class="parent-cat-badge apps">📱 تطبيقات Apps</span>';
+      urlPath = `/category/Apps/${esc(c.slug)}`;
+    } else if (parent === 'Games') {
+      parentBadge = '<span class="parent-cat-badge games">🎮 ألعاب Games</span>';
+      urlPath = `/category/Games/${esc(c.slug)}`;
+    }
+
+    const isVisible = c.isVisible !== false;
+    const statusPill = isVisible
+      ? '<span class="status-pill published">ظاهر</span>'
+      : '<span class="status-pill draft">مخفي</span>';
+
+    return `
+      <tr>
+        <td>
+          <strong>${esc(c.name)}</strong>
+          ${c.description ? `<br><small class="muted">${esc(c.description)}</small>` : ''}
+        </td>
+        <td>${parentBadge}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:6px;direction:ltr;justify-content:flex-end">
+            <code style="font-size:11px;color:#106b3b">${urlPath}</code>
+            <button type="button" class="url-copy-btn secondary-btn" data-copy-cat="${urlPath}" title="نسخ الرابط">📋 نسخ</button>
+          </div>
+        </td>
+        <td><strong>${esc(c.product_count || 0)}</strong> تطبيق / لعبة</td>
+        <td>${statusPill}</td>
+        <td>
+          <div class="row-actions">
+            <button data-cat-edit="${esc(c.id)}">تعديل</button>
+            <button class="delete-btn" data-cat-delete="${esc(c.id)}">حذف</button>
+          </div>
+        </td>
+      </tr>
+    `;
+  }).join('');
 }
 
 function resetCategoryForm() {
   $('#category-form').reset();
   $('#category-id').value = '';
-  $('#category-editor-title').textContent = 'إضافة قسم جديد';
+  $('#category-parent').value = '';
+  $('#category-visible').checked = true;
+  $('#category-editor-title').textContent = 'إضافة قسم / تصنيف فرعي جديد';
   message('#category-notice', '');
 }
 $('#category-cancel')?.addEventListener('click', resetCategoryForm);
@@ -244,6 +286,8 @@ $('#category-form')?.addEventListener('submit', async e => {
   const payload = {
     name: $('#category-name').value,
     slug: $('#category-slug').value,
+    parentSlug: $('#category-parent').value,
+    isVisible: $('#category-visible').checked,
     description: $('#category-description').value
   };
   try {
@@ -260,6 +304,17 @@ $('#category-form')?.addEventListener('submit', async e => {
 });
 
 $('#categories-table')?.addEventListener('click', async e => {
+  const copyBtn = e.target.closest('[data-copy-cat]');
+  if (copyBtn) {
+    const fullUrl = location.origin + copyBtn.dataset.copyCat;
+    navigator.clipboard.writeText(fullUrl).then(() => {
+      showToast('تم نسخ رابط القسم بنجاح!');
+    }).catch(() => {
+      showToast('تم نسخ المسار: ' + copyBtn.dataset.copyCat);
+    });
+    return;
+  }
+
   const editBtn = e.target.closest('[data-cat-edit]');
   if (editBtn) {
     const c = state.categories.find(x => String(x.id) === editBtn.dataset.catEdit);
@@ -267,21 +322,38 @@ $('#categories-table')?.addEventListener('click', async e => {
     $('#category-id').value = c.id;
     $('#category-name').value = c.name;
     $('#category-slug').value = c.slug;
+    $('#category-parent').value = c.parentSlug || '';
+    $('#category-visible').checked = c.isVisible !== false;
     $('#category-description').value = c.description || '';
-    $('#category-editor-title').textContent = 'تعديل القسم';
+    $('#category-editor-title').textContent = 'تعديل القسم / التصنيف';
     $('#category-name').focus();
     return;
   }
+
   const delBtn = e.target.closest('[data-cat-delete]');
   if (delBtn) {
     const c = state.categories.find(x => String(x.id) === delBtn.dataset.catDelete);
-    if (!c || !confirm(`متأكد تريد حذف القسم «${c.name}»؟`)) return;
+    if (!c) return;
+    if (!confirm(`متأكد تريد حذف القسم «${c.name}»؟`)) return;
     try {
       await api(`/api/admin/categories/${encodeURIComponent(c.id)}`, { method: 'DELETE' });
       await loadCategories();
       showToast('تم حذف القسم.');
     } catch (err) {
-      message('#categories-notice', err.message);
+      if (err.message && err.message.includes('مرتبط بـ')) {
+        const force = confirm(`${err.message}\n\nهل تريد تأكيد الحذف وفك الارتباط التلقائي بدون حذف أي تطبيق؟`);
+        if (force) {
+          try {
+            await api(`/api/admin/categories/${encodeURIComponent(c.id)}?force=true`, { method: 'DELETE' });
+            await loadCategories();
+            showToast('تم حذف القسم وفك ارتباط التطبيقات بأمان.');
+          } catch (delErr) {
+            message('#categories-notice', delErr.message);
+          }
+        }
+      } else {
+        message('#categories-notice', err.message);
+      }
     }
   }
 });
@@ -330,6 +402,8 @@ function renderPosts() {
     const cats = Array.isArray(p.categories) && p.categories.length ? p.categories.join('، ') : (p.category || 'بدون قسم');
     const ratingDisplay = p.rating != null ? `⭐ ${Number(p.rating).toFixed(1)}` : '—';
     const statusText = p.status === 'published' ? 'منشور' : 'مسودة';
+    const mainCat = isGame ? 'Games' : 'Apps';
+    const canonicalPath = p.detailUrl || `/category/${mainCat}/${encodeURIComponent(p.packageName || p.slug)}`;
 
     return `
       <tr>
@@ -341,7 +415,10 @@ function renderPosts() {
             <div>
               <strong>${esc(p.title)}</strong>
               ${p.featured ? '<span class="status-pill published" style="font-size:9px;padding:2px 6px">مميّز</span>' : ''}
-              <small>/${esc(p.slug)}</small>
+              <div style="font-size:11px;color:#66716a;direction:ltr;text-align:right;margin-top:2px">
+                ${p.packageName ? `<code>${esc(p.packageName)}</code> · ` : ''}
+                <code style="color:#106b3b">${esc(canonicalPath)}</code>
+              </div>
             </div>
           </div>
         </td>
@@ -353,6 +430,7 @@ function renderPosts() {
         <td>${new Date(p.updatedAt || p.createdAt).toLocaleDateString('ar-IQ')}</td>
         <td>
           <div class="row-actions">
+            <button class="secondary-btn" data-post-copy="${esc(canonicalPath)}" title="نسخ رابط صفحة العرض">نسخ الرابط</button>
             <button data-post-edit="${esc(p.id)}">تعديل</button>
             <button class="delete-btn" data-post-delete="${esc(p.id)}">حذف</button>
           </div>
@@ -631,13 +709,50 @@ $('#editor-blocks-container')?.addEventListener('click', e => {
   }
 });
 
+/* Live Canonical URL Preview & Category Parent Binding */
+function updatePostUrlPreview() {
+  const isGame = $('#post-type')?.value === 'game';
+  const mainCat = isGame ? 'Games' : 'Apps';
+  const rawPkg = ($('#post-package-name')?.value || '').trim();
+  const slug = ($('#post-slug')?.value || '').trim();
+  const identifier = rawPkg || slug || 'your-package';
+  const fullPath = `/category/${mainCat}/${encodeURIComponent(identifier)}`;
+  const preview = $('#post-url-preview');
+  if (preview) preview.textContent = fullPath;
+}
+
+function updateTypeCategories() {
+  const isGame = $('#post-type')?.value === 'game';
+  const targetParent = isGame ? 'Games' : 'Apps';
+  const hint = $('#cat-type-hint');
+  if (hint) {
+    hint.textContent = `يتم عرض وتعيين التصنيفات التابعة لقسم ${isGame ? 'الألعاب (Games)' : 'التطبيقات (Apps)'} حصراً.`;
+  }
+  const inlineParent = $('#inline-cat-parent');
+  if (inlineParent) inlineParent.value = targetParent;
+
+  // Filter existing selected categories that don't belong to this parent
+  const validForType = state.categories.filter(c => (c.parentSlug || '').toLowerCase() === targetParent.toLowerCase()).map(c => c.name);
+  if (validForType.length > 0 && state.selectedCategories.length > 0) {
+    const invalid = state.selectedCategories.filter(c => !validForType.includes(c));
+    if (invalid.length > 0) {
+      // alert or clean
+      showToast(`تنبيه: تم استبعاد تصنيفات غير متوافقة مع قسم ${targetParent}: ${invalid.join('، ')}`);
+      state.selectedCategories = state.selectedCategories.filter(c => validForType.includes(c));
+      renderCategoryChips();
+    }
+  }
+}
+
 /* Modal Open & Reset */
 function openPostEditor(p = null) {
   state.editing = p ? String(p.id) : null;
+  state.isDirty = false;
   $('#editor-title').textContent = p ? 'تعديل التطبيق أو اللعبة' : 'إضافة تطبيق أو لعبة جديدة';
   $('#post-id').value = p?.id || '';
   $('#post-title').value = p?.title || '';
   $('#post-slug').value = p?.slug || '';
+  $('#post-package-name').value = p?.packageName || '';
   $('#post-type').value = p?.type || 'app';
   $('#post-developer').value = p?.developer || '';
   $('#post-version').value = p?.version || '';
@@ -662,6 +777,7 @@ function openPostEditor(p = null) {
     state.selectedCategories = [];
   }
   renderCategoryChips();
+  updateTypeCategories();
 
   // Screenshots
   state.screenshots = Array.isArray(p?.screenshots) ? [...p.screenshots] : [];
@@ -685,6 +801,7 @@ function openPostEditor(p = null) {
 
   updateIconPreview(p?.iconUrl || '');
   updateCoverPreview(p?.coverImage || '');
+  updatePostUrlPreview();
 
   message('#editor-notice', '');
   $('#save-post').disabled = false;
@@ -693,26 +810,64 @@ function openPostEditor(p = null) {
   $('#post-title').focus();
 }
 
-function closePostEditor() {
+function closePostEditor(force = false) {
+  if (!force && state.isDirty) {
+    if (!confirm('لديك تعديلات غير محفوظة. هل تريد حقاً إغلاق النافذة بدون حفظ؟')) {
+      return;
+    }
+  }
   $('#editor-modal').hidden = true;
   document.body.style.overflow = '';
   state.editing = null;
+  state.isDirty = false;
 }
 
 $('#new-post')?.addEventListener('click', () => openPostEditor());
-$('#close-editor')?.addEventListener('click', closePostEditor);
-$('#cancel-editor')?.addEventListener('click', closePostEditor);
+$('#close-editor')?.addEventListener('click', () => closePostEditor());
+$('#cancel-editor')?.addEventListener('click', () => closePostEditor());
 $('#editor-modal')?.addEventListener('click', e => {
   if (e.target === $('#editor-modal')) closePostEditor();
 });
+
+// Mark dirty on any input inside post form
+$('#post-form')?.addEventListener('input', () => { state.isDirty = true; });
+$('#post-form')?.addEventListener('change', () => { state.isDirty = true; });
+
+window.addEventListener('beforeunload', (e) => {
+  if (state.isDirty && !$('#editor-modal')?.hidden) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
+
+/* Copy URL button */
+$('#copy-url-btn')?.addEventListener('click', () => {
+  const text = location.origin + ($('#post-url-preview')?.textContent || '');
+  navigator.clipboard.writeText(text).then(() => {
+    showToast('تم نسخ الرابط المباشر إلى الحافظة!');
+  }).catch(() => {
+    showToast('تم نسخ المسار: ' + $('#post-url-preview')?.textContent);
+  });
+});
+
+/* Post type & package name listeners */
+$('#post-type')?.addEventListener('change', () => {
+  updatePostUrlPreview();
+  updateTypeCategories();
+});
+$('#post-package-name')?.addEventListener('input', updatePostUrlPreview);
 
 /* Live slug generation */
 $('#post-title')?.addEventListener('input', () => {
   if (!state.editing && !$('#post-slug').dataset.edited) {
     $('#post-slug').value = slugify($('#post-title').value);
   }
+  updatePostUrlPreview();
 });
-$('#post-slug')?.addEventListener('input', () => { $('#post-slug').dataset.edited = '1'; });
+$('#post-slug')?.addEventListener('input', () => {
+  $('#post-slug').dataset.edited = '1';
+  updatePostUrlPreview();
+});
 
 /* Icon & Cover file inputs */
 $('#post-icon-url')?.addEventListener('input', e => updateIconPreview(e.target.value.trim()));
@@ -743,7 +898,7 @@ $('#post-cover-file')?.addEventListener('change', async e => {
   }
 });
 
-/* Autocomplete Category Search */
+/* Autocomplete Category Search (Strictly filtered by post type) */
 $('#category-search-input')?.addEventListener('input', e => {
   const query = e.target.value.trim().toLowerCase();
   const dropdown = $('#category-autocomplete-list');
@@ -752,14 +907,18 @@ $('#category-search-input')?.addEventListener('input', e => {
     dropdown.hidden = true;
     return;
   }
+  const isGame = $('#post-type')?.value === 'game';
+  const targetParent = isGame ? 'Games' : 'Apps';
   const matches = state.categories.filter(c =>
-    c.name.toLowerCase().includes(query) && !state.selectedCategories.includes(c.name)
+    (c.parentSlug || '').toLowerCase() === targetParent.toLowerCase() &&
+    c.name.toLowerCase().includes(query) &&
+    !state.selectedCategories.includes(c.name)
   );
   if (!matches.length) {
-    dropdown.innerHTML = '<div class="autocomplete-item muted">لا يوجد قسم مطابق</div>';
+    dropdown.innerHTML = `<div class="autocomplete-item muted">لا يوجد تصنيف فرعي مطابق لقسم ${targetParent}</div>`;
   } else {
     dropdown.innerHTML = matches.map(c => `
-      <div class="autocomplete-item" data-cat-select="${esc(c.name)}">${esc(c.name)}</div>
+      <div class="autocomplete-item" data-cat-select="${esc(c.name)}">${esc(c.name)} <small style="color:#66716a">(${targetParent})</small></div>
     `).join('');
   }
   dropdown.hidden = false;
@@ -787,12 +946,15 @@ $('#post-categories-chips')?.addEventListener('click', e => {
   }
 });
 
-// Inline quick category creation
+// Inline quick category creation with parent assignment
 $('#inline-add-cat-btn')?.addEventListener('click', () => {
   const box = $('#inline-cat-box');
   if (box) {
     box.hidden = !box.hidden;
-    if (!box.hidden) $('#inline-cat-name').focus();
+    if (!box.hidden) {
+      $('#inline-cat-parent').value = $('#post-type')?.value === 'game' ? 'Games' : 'Apps';
+      $('#inline-cat-name').focus();
+    }
   }
 });
 $('#inline-cat-cancel')?.addEventListener('click', () => {
@@ -803,10 +965,11 @@ $('#inline-cat-save')?.addEventListener('click', async () => {
   const name = $('#inline-cat-name').value.trim();
   if (!name) return;
   const slug = slugify(name);
+  const parentSlug = $('#inline-cat-parent').value || ($('#post-type')?.value === 'game' ? 'Games' : 'Apps');
   try {
     const res = await api('/api/admin/categories', {
       method: 'POST',
-      body: JSON.stringify({ name, slug, description: '' })
+      body: JSON.stringify({ name, slug, parentSlug, isVisible: true, description: '' })
     });
     if (res.item) state.categories.push(res.item);
     if (!state.selectedCategories.includes(name)) {
@@ -815,7 +978,7 @@ $('#inline-cat-save')?.addEventListener('click', async () => {
     }
     $('#inline-cat-box').hidden = true;
     $('#inline-cat-name').value = '';
-    showToast(`تم إنشاء القسم «${name}» وإضافته.`);
+    showToast(`تم إنشاء التصنيف «${name}» لقسم ${parentSlug} وإضافته بنجاح.`);
   } catch (err) {
     alert(err.message);
   }
@@ -893,12 +1056,24 @@ $('#post-form')?.addEventListener('submit', async e => {
   b.textContent = 'دا نحفظ وننشر...';
   message('#editor-notice', '');
 
+  const rawPkg = ($('#post-package-name').value || '').trim();
+  if (rawPkg) {
+    const pkgRegex = /^[a-zA-Z][a-zA-Z0-9_]*(\.[a-zA-Z][a-zA-Z0-9_]*)+$/;
+    if (!pkgRegex.test(rawPkg)) {
+      message('#editor-notice', 'اسم الحزمة (Package Name) غير صالح. يجب أن يكون بصيغة مثل: com.example.app');
+      b.disabled = false;
+      b.textContent = 'حفظ ونشر التغييرات';
+      return;
+    }
+  }
+
   // Extract raw text from blocks as fallback for search
   const rawContent = state.blocks.map(b => b.text || b.caption || b.url || '').filter(Boolean).join('\n\n');
 
   const payload = {
     title: $('#post-title').value,
     slug: $('#post-slug').value,
+    packageName: rawPkg,
     type: $('#post-type').value,
     developer: $('#post-developer').value,
     version: $('#post-version').value,
@@ -923,7 +1098,7 @@ $('#post-form')?.addEventListener('submit', async e => {
       method: state.editing ? 'PUT' : 'POST',
       body: JSON.stringify(payload)
     });
-    closePostEditor();
+    closePostEditor(true);
     await loadPosts();
     showToast('تم حفظ ونشر التغييرات بنجاح!');
   } catch (err) {
@@ -934,8 +1109,18 @@ $('#post-form')?.addEventListener('submit', async e => {
   }
 });
 
-/* Table actions: Edit & Delete */
+/* Table actions: Edit, Delete, Copy Link */
 $('#posts-table')?.addEventListener('click', async e => {
+  const copyBtn = e.target.closest('[data-post-copy]');
+  if (copyBtn) {
+    const fullUrl = location.origin + copyBtn.dataset.postCopy;
+    navigator.clipboard.writeText(fullUrl).then(() => {
+      showToast('تم نسخ رابط صفحة التطبيق بنجاح!');
+    }).catch(() => {
+      showToast('تم نسخ المسار: ' + copyBtn.dataset.postCopy);
+    });
+    return;
+  }
   const editBtn = e.target.closest('[data-post-edit]');
   if (editBtn) {
     const p = state.posts.find(x => String(x.id) === editBtn.dataset.postEdit);
