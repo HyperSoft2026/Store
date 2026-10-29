@@ -7,12 +7,22 @@ const app = fs.readFileSync(require.resolve('../public/app.js'), 'utf8');
 const styles = fs.readFileSync(require.resolve('../public/styles.css'), 'utf8');
 const adminStyles = fs.readFileSync(require.resolve('../public/admin-assets.css'), 'utf8');
 const server = fs.readFileSync(require.resolve('../server.js'), 'utf8');
+
 assert.match(admin, /name="robots" content="noindex,nofollow,noarchive"/, 'admin page should discourage indexing');
 assert.ok(admin.indexOf('/admin-utils.js?v=0.0.5') < admin.indexOf('/admin-assets.js?v=0.0.5'), 'slug utility must load before admin controller');
 assert.match(admin, /id="login-form"/, 'admin login form should exist');
 assert.match(admin, /id="post-form"/, 'post editor form should exist');
-assert.match(admin, /id="product-form"/, 'product editor form should exist');
+assert.ok(!admin.includes('id="product-form"'), 'standalone product form should be removed from admin');
+assert.ok(!admin.includes('data-admin-view="products"'), 'standalone products view should be removed from admin navigation');
 assert.match(admin, /id="category-form"/, 'category editor form should exist');
+assert.match(admin, /id="admin-menu-toggle"/, 'admin hamburger toggle should exist');
+assert.match(admin, /aria-controls="admin-sidebar"/, 'admin menu toggle should control sidebar drawer');
+assert.match(admin, /id="post-icon-url"/, 'admin post form should support app icon');
+assert.match(admin, /id="post-cover"/, 'admin post form should support cover image');
+assert.match(admin, /id="post-categories-chips"/, 'admin post form should support multi-category chips');
+assert.match(admin, /id="post-screenshots-list"/, 'admin post form should support screenshots gallery');
+assert.match(admin, /id="editor-blocks-container"/, 'admin post form should support visual block-based editor');
+
 assert.ok(storefront.includes('/styles.css?v=0.0.5'), 'storefront CSS cache key should match release');
 assert.ok(storefront.includes('/app.js?v=0.0.5'), 'storefront JS cache key should match release');
 assert.ok(app.includes('/posts.css?v=0.0.5'), 'posts CSS cache key should match release');
@@ -40,11 +50,12 @@ assert.match(app, /showProductDetails\(slug\)/, 'product action must load the de
 assert.ok(!storefront.includes('لوحة التحكم') && !storefront.includes('لوحة الإدارة') && !storefront.includes('/admin/index.html'), 'admin panel must not be linked from the public storefront');
 assert.match(server, /app\.get\(ADMIN_PATH/, 'admin page must only be mounted at the configured private path');
 assert.match(server, /ALTER TABLE store_products ADD COLUMN IF NOT EXISTS rating NUMERIC\(2,1\)/, 'existing databases should receive a nullable rating column');
+assert.match(server, /ALTER TABLE store_posts ADD COLUMN IF NOT EXISTS rating NUMERIC\(2,1\)/, 'posts should receive nullable rating column');
 assert.match(server, /rating: row\.rating == null \? null : Number\(row\.rating\)/, 'API should return the actual nullable rating from PostgreSQL');
 assert.match(server, /rating=\$11/, 'admin product updates should persist rating');
 assert.match(app, /class="product-rating"/, 'product cards should show the rating row');
 assert.match(app, /class="rating-star"/, 'product cards should render five fractional-fill stars');
 assert.ok(app.includes('<h3 class="product-title"><a href="/product/${slug}"'), 'product title should link to details');
 assert.match(styles, /product-image-wrap\{flex:0 0 124px/, 'product icon should occupy the RTL right-hand column');
-assert.match(admin, /id="product-rating"/, 'admin should provide an optional product rating field');
-console.log('UI contract tests passed: private admin route, theme, detail navigation, database ratings and responsive product rows.');
+assert.match(admin, /id="post-rating"/, 'admin should provide an optional rating field in post form');
+console.log('UI contract tests passed: private admin route, hamburger drawer, unified post publishing, theme, detail navigation, database ratings and responsive product rows.');

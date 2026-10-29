@@ -1260,15 +1260,49 @@ body.menu-open { overflow: hidden; }
   z-index: 2;
   max-width: 90vw;
   max-height: 88vh;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
 }
-.lightbox-container img {
-  max-width: 100%;
-  max-height: 85vh;
+.lightbox-img-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.lightbox-img-wrap img {
+  max-width: 80vw;
+  max-height: 80vh;
   object-fit: contain;
   border-radius: 16px;
   box-shadow: var(--shadow-lg);
+}
+.lightbox-counter {
+  position: absolute;
+  bottom: -32px;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 3px 12px;
+  border-radius: 14px;
+}
+.lightbox-nav-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: #fff;
+  font-size: 26px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background .15s;
+}
+.lightbox-nav-btn:hover {
+  background: rgba(255, 255, 255, 0.4);
 }
 .lightbox-close {
   position: absolute;
@@ -1278,9 +1312,49 @@ body.menu-open { overflow: hidden; }
   height: 38px;
   border-radius: 50%;
   background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
   color: #fff;
   font-size: 24px;
   line-height: 1;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.lightbox-close:hover {
+  background: rgba(255, 255, 255, 0.4);
+}
+.detail-rich-content {
+  line-height: 1.9;
+  font-size: 14px;
+  color: #46534a;
+}
+.detail-block-h2 {
+  font-size: 20px;
+  margin: 18px 0 10px;
+  color: var(--ink);
+}
+.detail-block-h3 {
+  font-size: 16px;
+  margin: 14px 0 8px;
+  color: var(--ink);
+}
+.detail-block-p {
+  margin: 0 0 12px;
+  line-height: 1.9;
+}
+.detail-category-badge {
+  border: 0;
+  cursor: pointer;
+  background: var(--primary-light);
+  color: var(--primary-dark);
+  border-radius: 6px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 800;
+  transition: background .15s;
+}
+.detail-category-badge:hover {
+  background: #c5edd2;
 }
 
 /* Footer */

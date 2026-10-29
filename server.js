@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const fs = require('fs');
 const { Pool } = require('pg');
 
 const app = express();
@@ -7,6 +8,9 @@ const PORT = Number(process.env.PORT) || 3000;
 const STORE_NAME = process.env.STORE_NAME || 'Store';
 const STORE_LOGO = process.env.STORE_LOGO || '/Logo.png';
 const STORE_LINK = (process.env.STORE_LINK || '').replace(/\/$/, '');
+
+const UPLOADS_DIR = path.join(__dirname, 'public', 'uploads');
+try { fs.mkdirSync(UPLOADS_DIR, { recursive: true }); } catch {}
 
 const crypto = require('crypto');
 const { promisify } = require('util');
@@ -60,31 +64,142 @@ function adminText(value, max) { return typeof value === 'string' ? value.trim()
 function adminSlug(value) {
   return adminText(value, 180).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 160);
 }
+
+function safeScreenshots(raw) {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) return parsed.map(s => String(s || '').trim()).filter(Boolean);
+  } catch {}
+  return String(raw).split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+}
+
 function parsePost(body) {
-  const title = adminText(body.title, 180);
+  const title = adminText(body.title || body.name, 180);
   const slug = adminSlug(body.slug || title);
-  const cover = adminText(body.coverImage, 1500);
-  if (!title) return { error: 'عنوان المشاركة مطلوب.' };
+  const cover = adminText(body.coverImage || body.cover, 1500);
+  const iconUrl = adminText(body.iconUrl || body.imageUrl || body.icon, 1500);
+  const type = body.type === 'game' ? 'game' : 'app';
+  const developer = adminText(body.developer, 180);
+  const version = adminText(body.version, 80);
+  const fileSize = adminText(body.fileSize, 80);
+  const downloadUrl = adminText(body.downloadUrl, 2000);
+  const apkFileUrl = adminText(body.apkFileUrl, 2000);
+  const rating = body.rating === '' || body.rating == null ? null : Number(body.rating);
+  const isFeatured = body.featured === true || body.isFeatured === true;
+  const status = body.status === 'published' ? 'published' : 'draft';
+
+  let categories = '[]';
+  if (Array.isArray(body.categories)) {
+    categories = JSON.stringify(body.categories.map(c => adminText(c, 100)).filter(Boolean));
+  } else if (typeof body.categories === 'string' && body.categories.trim()) {
+    try {
+      const arr = JSON.parse(body.categories);
+      categories = JSON.stringify(Array.isArray(arr) ? arr.map(c => adminText(c, 100)).filter(Boolean) : []);
+    } catch {
+      categories = JSON.stringify(body.categories.split(/[\n,]+/).map(c => adminText(c, 100)).filter(Boolean));
+    }
+  }
+
+  let primaryCategory = adminText(body.category, 100);
+  if (!primaryCategory) {
+    try {
+      const parsedCats = JSON.parse(categories);
+      if (parsedCats.length > 0) primaryCategory = parsedCats[0];
+    } catch {}
+  }
+
+  let screenshots = '[]';
+  if (Array.isArray(body.screenshots)) {
+    screenshots = JSON.stringify(body.screenshots.map(s => adminText(s, 1500)).filter(Boolean).slice(0, 20));
+  } else if (typeof body.screenshots === 'string' && body.screenshots.trim()) {
+    try {
+      const arr = JSON.parse(body.screenshots);
+      screenshots = JSON.stringify(Array.isArray(arr) ? arr.map(s => adminText(s, 1500)).filter(Boolean).slice(0, 20) : []);
+    } catch {
+      screenshots = JSON.stringify(body.screenshots.split(/[\n,]+/).map(s => adminText(s, 1500)).filter(Boolean).slice(0, 20));
+    }
+  }
+
+  let contentBlocks = '[]';
+  if (Array.isArray(body.contentBlocks)) {
+    contentBlocks = JSON.stringify(body.contentBlocks);
+  } else if (typeof body.contentBlocks === 'string' && body.contentBlocks.trim()) {
+    contentBlocks = body.contentBlocks;
+  }
+
+  if (!title) return { error: 'عنوان المشاركة / اسم التطبيق مطلوب.' };
   if (!slug) return { error: 'رابط المشاركة غير صالح.' };
   if (cover && !/^https?:\/\//i.test(cover) && !cover.startsWith('/')) return { error: 'رابط صورة الغلاف غير صالح.' };
+  if (iconUrl && !/^https?:\/\//i.test(iconUrl) && !iconUrl.startsWith('/')) return { error: 'رابط أيقونة التطبيق غير صالح.' };
+  if (downloadUrl && !/^https?:\/\//i.test(downloadUrl) && !downloadUrl.startsWith('/')) return { error: 'رابط التنزيل المباشر غير صالح.' };
+  if (apkFileUrl && !/^https?:\/\//i.test(apkFileUrl) && !apkFileUrl.startsWith('/')) return { error: 'رابط ملف APK غير صالح.' };
+  if (rating !== null && (!Number.isFinite(rating) || rating < 0 || rating > 5 || Math.round(rating * 10) !== rating * 10)) {
+    return { error: 'التقييم يجب أن يكون بين 0 و5 وبحد أقصى منزلة عشرية واحدة.' };
+  }
+
   return { post: {
-    title: title, slug: slug, excerpt: adminText(body.excerpt, 500),
-    content: adminText(body.content, 50000), cover: cover,
-    category: adminText(body.category, 100),
-    status: body.status === 'published' ? 'published' : 'draft'
+    title, slug, excerpt: adminText(body.excerpt || body.shortDescription, 500),
+    content: adminText(body.content || body.description, 50000),
+    contentBlocks, cover, iconUrl, type, category: primaryCategory, categories,
+    screenshots, downloadUrl, apkFileUrl, version, fileSize, developer,
+    rating, isFeatured, status
   } };
 }
+
 function publicPost(row) {
-  return { id: row.id, title: row.title, slug: row.slug, excerpt: row.excerpt,
-    content: row.content, coverImage: row.cover_image, category: row.category,
-    status: row.status, publishedAt: row.published_at, createdAt: row.created_at, updatedAt: row.updated_at };
+  let categories = [];
+  try {
+    const c = JSON.parse(row.categories || '[]');
+    if (Array.isArray(c) && c.length) categories = c;
+  } catch {}
+  if (!categories.length && row.category) categories = [row.category];
+
+  let contentBlocks = [];
+  try {
+    contentBlocks = JSON.parse(row.content_blocks || '[]');
+    if (!Array.isArray(contentBlocks)) contentBlocks = [];
+  } catch {}
+
+  const ratingVal = row.rating == null ? null : Number(row.rating);
+
+  return {
+    id: row.id,
+    title: row.title,
+    name: row.title,
+    slug: row.slug,
+    excerpt: row.excerpt,
+    shortDescription: row.excerpt,
+    content: row.content,
+    description: row.content,
+    contentBlocks,
+    coverImage: row.cover_image,
+    iconUrl: row.icon_url,
+    imageUrl: row.icon_url || row.cover_image,
+    type: row.type || 'app',
+    category: row.category,
+    categories,
+    screenshots: safeScreenshots(row.screenshots),
+    version: row.version || '',
+    fileSize: row.file_size || '',
+    developer: row.developer || '',
+    rating: ratingVal,
+    featured: Boolean(row.is_featured),
+    downloads: Number(row.downloads || 0),
+    hasDownload: Boolean(row.download_url || row.apk_file_url),
+    status: row.status,
+    publishedAt: row.published_at || row.created_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at || row.created_at
+  };
 }
+
 const DATABASE_URL = process.env.POSTGRESQL_ADDON_URI;
 
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: false, limit: '1mb' }));
+app.use(express.json({ limit: '60mb' }));
+app.use(express.urlencoded({ extended: false, limit: '60mb' }));
 
 const pool = DATABASE_URL
   ? new Pool({
@@ -169,6 +284,19 @@ async function initializeDatabase() {
     await client.query("ALTER TABLE store_products ADD COLUMN IF NOT EXISTS platform TEXT NOT NULL DEFAULT 'Android'");
     await client.query("ALTER TABLE store_products ADD COLUMN IF NOT EXISTS release_notes TEXT NOT NULL DEFAULT ''");
     await client.query("ALTER TABLE store_categories ADD COLUMN IF NOT EXISTS icon TEXT NOT NULL DEFAULT ''");
+    await client.query("ALTER TABLE store_posts ADD COLUMN IF NOT EXISTS icon_url TEXT NOT NULL DEFAULT ''");
+    await client.query("ALTER TABLE store_posts ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'app'");
+    await client.query("ALTER TABLE store_posts ADD COLUMN IF NOT EXISTS categories TEXT NOT NULL DEFAULT '[]'");
+    await client.query("ALTER TABLE store_posts ADD COLUMN IF NOT EXISTS screenshots TEXT NOT NULL DEFAULT '[]'");
+    await client.query("ALTER TABLE store_posts ADD COLUMN IF NOT EXISTS content_blocks TEXT NOT NULL DEFAULT '[]'");
+    await client.query("ALTER TABLE store_posts ADD COLUMN IF NOT EXISTS apk_file_url TEXT NOT NULL DEFAULT ''");
+    await client.query("ALTER TABLE store_posts ADD COLUMN IF NOT EXISTS download_url TEXT NOT NULL DEFAULT ''");
+    await client.query("ALTER TABLE store_posts ADD COLUMN IF NOT EXISTS version TEXT NOT NULL DEFAULT ''");
+    await client.query("ALTER TABLE store_posts ADD COLUMN IF NOT EXISTS file_size TEXT NOT NULL DEFAULT ''");
+    await client.query("ALTER TABLE store_posts ADD COLUMN IF NOT EXISTS developer TEXT NOT NULL DEFAULT ''");
+    await client.query("ALTER TABLE store_posts ADD COLUMN IF NOT EXISTS rating NUMERIC(2,1) CHECK (rating IS NULL OR (rating >= 0 AND rating <= 5))");
+    await client.query("ALTER TABLE store_posts ADD COLUMN IF NOT EXISTS is_featured BOOLEAN NOT NULL DEFAULT FALSE");
+    await client.query("ALTER TABLE store_posts ADD COLUMN IF NOT EXISTS downloads BIGINT NOT NULL DEFAULT 0");
     await client.query('CREATE INDEX IF NOT EXISTS store_admin_sessions_expiry_idx ON store_admin_sessions (expires_at)');
     await client.query(`
       CREATE TABLE IF NOT EXISTS store_admin_attempts (
@@ -179,6 +307,9 @@ async function initializeDatabase() {
       )
     `);
     await client.query('CREATE INDEX IF NOT EXISTS store_posts_public_idx ON store_posts (status, published_at DESC)');
+    await client.query('CREATE INDEX IF NOT EXISTS store_posts_type_idx ON store_posts (status, type, created_at DESC)');
+    await client.query('CREATE INDEX IF NOT EXISTS store_posts_featured_idx ON store_posts (status, is_featured, created_at DESC)');
+    await client.query('CREATE INDEX IF NOT EXISTS store_posts_downloads_idx ON store_posts (status, downloads DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS store_products_published_idx ON store_products (is_published, is_featured, created_at DESC)');
     await client.query('CREATE INDEX IF NOT EXISTS store_products_category_idx ON store_products (category_id)');
     await client.query('CREATE INDEX IF NOT EXISTS store_products_type_idx ON store_products (is_published, type, created_at DESC)');
@@ -312,42 +443,69 @@ app.get('/api/products', requireDatabase, async (req, res, next) => {
     const sort = String(req.query.sort || '').trim().toLowerCase();
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 24, 1), 60);
     const offset = Math.max(Number.parseInt(req.query.offset, 10) || 0, 0);
+
     const values = [];
-    const where = ['p.is_published = TRUE'];
+    const whereP = ['p.is_published = TRUE'];
+    const wherePosts = ["sp.status = 'published'"];
 
     if (search) {
       values.push(`%${search.replace(/[\\%_]/g, '\\$&')}%`);
-      where.push(`(p.name ILIKE $${values.length} OR p.short_description ILIKE $${values.length} OR p.developer ILIKE $${values.length} OR p.description ILIKE $${values.length})`);
+      const idx = values.length;
+      whereP.push(`(p.name ILIKE $${idx} OR p.short_description ILIKE $${idx} OR p.developer ILIKE $${idx} OR p.description ILIKE $${idx})`);
+      wherePosts.push(`(sp.title ILIKE $${idx} OR sp.excerpt ILIKE $${idx} OR sp.developer ILIKE $${idx} OR sp.content ILIKE $${idx})`);
     }
     if (category) {
       values.push(category);
-      where.push(`c.slug = $${values.length}`);
+      const idx = values.length;
+      whereP.push(`c.slug = $${idx}`);
+      wherePosts.push(`(sp.category = $${idx} OR sp.categories ILIKE '%' || $${idx} || '%')`);
     }
     if (type === 'app' || type === 'game') {
       values.push(type);
-      where.push(`p.type = $${values.length}`);
+      const idx = values.length;
+      whereP.push(`p.type = $${idx}`);
+      wherePosts.push(`sp.type = $${idx}`);
     }
     if (featured === 'true' || featured === '1') {
-      where.push('p.is_featured = TRUE');
+      whereP.push('p.is_featured = TRUE');
+      wherePosts.push('sp.is_featured = TRUE');
     }
 
-    let orderBy = 'p.is_featured DESC, p.created_at DESC';
+    let orderBy = 'is_featured DESC, created_at DESC';
     if (sort === 'downloads') {
-      orderBy = 'p.downloads DESC, p.created_at DESC';
+      orderBy = 'downloads DESC, created_at DESC';
     } else if (sort === 'rating') {
-      orderBy = 'p.rating DESC NULLS LAST, p.created_at DESC';
+      orderBy = 'rating DESC NULLS LAST, created_at DESC';
     } else if (sort === 'newest') {
-      orderBy = 'p.created_at DESC';
+      orderBy = 'created_at DESC';
     }
 
-    const countResult = await pool.query(
-      `SELECT COUNT(*)::int AS total FROM store_products p LEFT JOIN store_categories c ON c.id=p.category_id WHERE ${where.join(' AND ')}`,
-      values
-    );
-    values.push(limit, offset);
+    const unifiedQuery = `
+      SELECT p.id, p.name, p.slug, p.short_description, p.description,
+             p.image_url, p.version, p.file_size, p.developer, p.rating, p.is_featured,
+             p.downloads, p.download_url, p.type, p.screenshots, p.platform, p.release_notes,
+             p.created_at, p.updated_at, c.name AS category_name, c.slug AS category_slug,
+             '[]' AS categories, '[]' AS content_blocks
+      FROM store_products p
+      LEFT JOIN store_categories c ON c.id = p.category_id
+      WHERE ${whereP.join(' AND ')}
+      UNION ALL
+      SELECT sp.id, sp.title AS name, sp.slug, sp.excerpt AS short_description, sp.content AS description,
+             COALESCE(NULLIF(sp.icon_url, ''), sp.cover_image) AS image_url,
+             sp.version, sp.file_size, sp.developer, sp.rating, sp.is_featured,
+             sp.downloads, COALESCE(NULLIF(sp.download_url, ''), sp.apk_file_url) AS download_url,
+             sp.type, sp.screenshots, 'Android' AS platform, '' AS release_notes,
+             sp.created_at, sp.updated_at, sp.category AS category_name, sp.category AS category_slug,
+             sp.categories, sp.content_blocks
+      FROM store_posts sp
+      WHERE ${wherePosts.join(' AND ')}
+    `;
+
+    const countResult = await pool.query(`SELECT COUNT(*)::int AS total FROM (${unifiedQuery}) u`, values);
+    const pageValues = [...values, limit, offset];
     const result = await pool.query(
-      `${PRODUCT_SELECT} WHERE ${where.join(' AND ')} ORDER BY ${orderBy} LIMIT $${values.length - 1} OFFSET $${values.length}`,
-      values
+      `SELECT * FROM (${unifiedQuery}) u ORDER BY ${orderBy} LIMIT $${pageValues.length - 1} OFFSET $${pageValues.length}`,
+      pageValues
     );
     res.json({ items: result.rows.map(safeProduct), total: countResult.rows[0].total, limit, offset });
   } catch (error) { next(error); }
@@ -355,12 +513,20 @@ app.get('/api/products', requireDatabase, async (req, res, next) => {
 
 app.get('/api/products/:slug', requireDatabase, async (req, res, next) => {
   try {
+    const slug = String(req.params.slug).slice(0, 160);
     const result = await pool.query(
       `${PRODUCT_SELECT} WHERE p.slug = $1 AND p.is_published = TRUE LIMIT 1`,
-      [String(req.params.slug).slice(0, 160)]
+      [slug]
     );
-    if (!result.rowCount) return res.status(404).json({ error: 'not_found', message: 'ما لكينا هالمنتج.' });
-    res.json(safeProduct(result.rows[0]));
+    if (result.rowCount) return res.json(safeProduct(result.rows[0]));
+
+    const postResult = await pool.query(
+      "SELECT * FROM store_posts WHERE slug = $1 AND status = 'published' LIMIT 1",
+      [slug]
+    );
+    if (postResult.rowCount) return res.json(publicPost(postResult.rows[0]));
+
+    res.status(404).json({ error: 'not_found', message: 'ما لكينا هالمنتج.' });
   } catch (error) { next(error); }
 });
 
@@ -368,8 +534,12 @@ app.get('/api/products/:slug/related', requireDatabase, async (req, res, next) =
   try {
     const slug = String(req.params.slug).slice(0, 160);
     const current = await pool.query('SELECT id, category_id, type FROM store_products WHERE slug = $1 AND is_published = TRUE LIMIT 1', [slug]);
-    if (!current.rowCount) return res.status(404).json({ error: 'not_found', message: 'ما لكينا هالمنتج.' });
-    const row = current.rows[0];
+    let row = current.rows[0];
+    if (!row) {
+      const postCur = await pool.query("SELECT id, category, type FROM store_posts WHERE slug = $1 AND status = 'published' LIMIT 1", [slug]);
+      if (!postCur.rowCount) return res.status(404).json({ error: 'not_found', message: 'ما لكينا هالمنتج.' });
+      row = { id: postCur.rows[0].id, category_id: null, type: postCur.rows[0].type };
+    }
     const related = await pool.query(`
       ${PRODUCT_SELECT}
       WHERE p.is_published = TRUE AND p.id <> $1 AND (p.category_id = $2 OR p.type = $3)
@@ -382,31 +552,79 @@ app.get('/api/products/:slug/related', requireDatabase, async (req, res, next) =
 
 app.post('/api/products/:slug/download', requireDatabase, async (req, res, next) => {
   try {
+    const slug = String(req.params.slug).slice(0, 160);
+    const postRes = await pool.query(
+      "UPDATE store_posts SET downloads = downloads + 1 WHERE slug = $1 AND status = 'published' AND (download_url <> '' OR apk_file_url <> '') RETURNING download_url, apk_file_url",
+      [slug]
+    );
+    if (postRes.rowCount) {
+      const dl = postRes.rows[0].download_url || postRes.rows[0].apk_file_url;
+      return res.json({ url: dl });
+    }
     const result = await pool.query(
       "UPDATE store_products SET downloads = downloads + 1 WHERE slug = $1 AND is_published = TRUE AND download_url <> '' RETURNING download_url",
-      [String(req.params.slug).slice(0, 160)]
+      [slug]
     );
     if (!result.rowCount) return res.status(404).json({ error: 'download_unavailable', message: 'التنزيل لهذا المنتج مو متوفر حالياً.' });
     res.json({ url: result.rows[0].download_url });
   } catch (error) { next(error); }
 });
 
-
 /* Public API: visitors only receive published posts. */
 app.get('/api/posts', requireDatabase, async (req, res, next) => {
   try {
+    const search = String(req.query.q || '').trim().slice(0, 100);
+    const category = String(req.query.category || '').trim().slice(0, 100);
+    const type = String(req.query.type || '').trim().toLowerCase();
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 12, 1), 50);
     const offset = Math.max(Number.parseInt(req.query.offset, 10) || 0, 0);
-    const result = await pool.query("SELECT id,title,slug,excerpt,cover_image,category,published_at,created_at FROM store_posts WHERE status='published' ORDER BY published_at DESC NULLS LAST,created_at DESC LIMIT $1 OFFSET $2", [limit, offset]);
-    const count = await pool.query("SELECT COUNT(*)::int AS total FROM store_posts WHERE status='published'");
-    res.json({ items: result.rows.map(function (row) { return { id: row.id, title: row.title, slug: row.slug, excerpt: row.excerpt, coverImage: row.cover_image, category: row.category, publishedAt: row.published_at || row.created_at }; }), total: count.rows[0].total });
+    const values = [];
+    const where = ["status = 'published'"];
+
+    if (search) {
+      values.push(`%${search.replace(/[\\%_]/g, '\\$&')}%`);
+      where.push(`(title ILIKE $${values.length} OR excerpt ILIKE $${values.length} OR developer ILIKE $${values.length} OR content ILIKE $${values.length})`);
+    }
+    if (category) {
+      values.push(`%${category}%`);
+      where.push(`(category ILIKE $${values.length} OR categories ILIKE $${values.length})`);
+    }
+    if (type === 'app' || type === 'game') {
+      values.push(type);
+      where.push(`type = $${values.length}`);
+    }
+
+    const countResult = await pool.query(
+      `SELECT COUNT(*)::int AS total FROM store_posts WHERE ${where.join(' AND ')}`,
+      values
+    );
+    values.push(limit, offset);
+    const result = await pool.query(
+      `SELECT * FROM store_posts WHERE ${where.join(' AND ')} ORDER BY is_featured DESC, published_at DESC NULLS LAST, created_at DESC LIMIT $${values.length - 1} OFFSET $${values.length}`,
+      values
+    );
+    res.json({ items: result.rows.map(publicPost), total: countResult.rows[0].total });
   } catch (error) { next(error); }
 });
+
 app.get('/api/posts/:slug', requireDatabase, async (req, res, next) => {
   try {
     const result = await pool.query("SELECT * FROM store_posts WHERE slug=$1 AND status='published' LIMIT 1", [String(req.params.slug).slice(0, 160)]);
     if (!result.rowCount) return res.status(404).json({ error: 'not_found', message: 'ما لكينا هالمشاركة.' });
     res.json(publicPost(result.rows[0]));
+  } catch (error) { next(error); }
+});
+
+app.post('/api/posts/:slug/download', requireDatabase, async (req, res, next) => {
+  try {
+    const slug = String(req.params.slug).slice(0, 160);
+    const result = await pool.query(
+      "UPDATE store_posts SET downloads = downloads + 1 WHERE slug = $1 AND status = 'published' AND (download_url <> '' OR apk_file_url <> '') RETURNING download_url, apk_file_url",
+      [slug]
+    );
+    if (!result.rowCount) return res.status(404).json({ error: 'download_unavailable', message: 'التنزيل لهذا التطبيق مو متوفر حالياً.' });
+    const row = result.rows[0];
+    res.json({ url: row.download_url || row.apk_file_url });
   } catch (error) { next(error); }
 });
 
@@ -562,34 +780,90 @@ app.delete('/api/admin/products/:id', requireDatabase, requireAdmin, requireAdmi
   } catch (error) { next(error); }
 });
 
+app.post('/api/admin/upload', requireDatabase, requireAdmin, requireAdminCsrf, (req, res) => {
+  try {
+    const { fileName, dataBase64, mimeType } = req.body || {};
+    if (!dataBase64 || typeof dataBase64 !== 'string') {
+      return res.status(400).json({ message: 'بيانات الملف غير صالحة.' });
+    }
+    const cleanBase64 = dataBase64.replace(/^data:[^;]+;base64,/, '');
+    const buffer = Buffer.from(cleanBase64, 'base64');
+    if (buffer.length > 50 * 1024 * 1024) {
+      return res.status(413).json({ message: 'حجم الملف يتجاوز 50 ميجابايت.' });
+    }
+    const rawExt = path.extname(String(fileName || '')).toLowerCase();
+    const allowed = ['.png', '.jpg', '.jpeg', '.webp', '.svg', '.gif', '.apk', '.mp4', '.webm'];
+    let ext = allowed.includes(rawExt) ? rawExt : '';
+    if (!ext) {
+      if (mimeType === 'image/png') ext = '.png';
+      else if (mimeType === 'image/jpeg') ext = '.jpg';
+      else if (mimeType === 'image/webp') ext = '.webp';
+      else if (mimeType === 'application/vnd.android.package-archive') ext = '.apk';
+      else if (mimeType === 'video/mp4') ext = '.mp4';
+      else return res.status(400).json({ message: 'نوع الملف غير مدعوم. الصيغ المدعومة: صور، APK، فيديو MP4.' });
+    }
+    const safeName = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}${ext}`;
+    const targetFile = path.join(UPLOADS_DIR, safeName);
+    fs.writeFileSync(targetFile, buffer);
+    res.json({
+      ok: true,
+      url: `/uploads/${safeName}`,
+      fileName: safeName,
+      size: buffer.length
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'تعذّر حفظ الملف: ' + err.message });
+  }
+});
+
 app.get('/api/admin/posts', requireDatabase, requireAdmin, async (req, res, next) => {
   try {
     const q = adminText(String(req.query.q || ''), 100);
     const values = [];
     let where = '';
-    if (q) { values.push('%' + q + '%'); where = 'WHERE title ILIKE $1 OR slug ILIKE $1 OR category ILIKE $1'; }
-    const result = await pool.query('SELECT * FROM store_posts ' + where + ' ORDER BY updated_at DESC LIMIT 200', values);
+    if (q) {
+      values.push('%' + q + '%');
+      where = 'WHERE title ILIKE $1 OR slug ILIKE $1 OR category ILIKE $1 OR developer ILIKE $1';
+    }
+    const result = await pool.query('SELECT * FROM store_posts ' + where + ' ORDER BY updated_at DESC, created_at DESC LIMIT 500', values);
     res.json({ items: result.rows.map(publicPost) });
   } catch (error) { next(error); }
 });
+
 app.post('/api/admin/posts', requireDatabase, requireAdmin, requireAdminCsrf, async (req, res, next) => {
   const parsed = parsePost(req.body || {});
   if (parsed.error) return res.status(400).json({ message: parsed.error });
   const p = parsed.post;
   try {
-    const result = await pool.query("INSERT INTO store_posts (title,slug,excerpt,content,cover_image,category,status,published_at) VALUES ($1,$2,$3,$4,$5,$6,$7,CASE WHEN $7='published' THEN NOW() ELSE NULL END) RETURNING *", [p.title,p.slug,p.excerpt,p.content,p.cover,p.category,p.status]);
+    const result = await pool.query(
+      `INSERT INTO store_posts
+       (title, slug, excerpt, content, content_blocks, cover_image, icon_url, type, category, categories, screenshots, download_url, apk_file_url, version, file_size, developer, rating, is_featured, status, published_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, CASE WHEN $19='published' THEN NOW() ELSE NULL END)
+       RETURNING *`,
+      [p.title, p.slug, p.excerpt, p.content, p.contentBlocks, p.cover, p.iconUrl, p.type, p.category, p.categories, p.screenshots, p.downloadUrl, p.apkFileUrl, p.version, p.fileSize, p.developer, p.rating, p.isFeatured, p.status]
+    );
     res.status(201).json({ item: publicPost(result.rows[0]) });
   } catch (error) {
     if (error.code === '23505') return res.status(409).json({ message: 'هذا الرابط مستخدم من قبل. اختار رابط ثاني.' });
     next(error);
   }
 });
+
 app.put('/api/admin/posts/:id', requireDatabase, requireAdmin, requireAdminCsrf, async (req, res, next) => {
   const parsed = parsePost(req.body || {});
   if (parsed.error) return res.status(400).json({ message: parsed.error });
   const p = parsed.post;
   try {
-    const result = await pool.query("UPDATE store_posts SET title=$1,slug=$2,excerpt=$3,content=$4,cover_image=$5,category=$6,status=$7,published_at=CASE WHEN $7='published' THEN COALESCE(published_at,NOW()) ELSE NULL END,updated_at=NOW() WHERE id=$8 RETURNING *", [p.title,p.slug,p.excerpt,p.content,p.cover,p.category,p.status,req.params.id]);
+    const result = await pool.query(
+      `UPDATE store_posts SET
+       title=$1, slug=$2, excerpt=$3, content=$4, content_blocks=$5, cover_image=$6, icon_url=$7,
+       type=$8, category=$9, categories=$10, screenshots=$11, download_url=$12, apk_file_url=$13,
+       version=$14, file_size=$15, developer=$16, rating=$17, is_featured=$18, status=$19,
+       published_at=CASE WHEN $19='published' THEN COALESCE(published_at,NOW()) ELSE NULL END,
+       updated_at=NOW()
+       WHERE id=$20 RETURNING *`,
+      [p.title, p.slug, p.excerpt, p.content, p.contentBlocks, p.cover, p.iconUrl, p.type, p.category, p.categories, p.screenshots, p.downloadUrl, p.apkFileUrl, p.version, p.fileSize, p.developer, p.rating, p.isFeatured, p.status, req.params.id]
+    );
     if (!result.rowCount) return res.status(404).json({ message: 'المشاركة مو موجودة.' });
     res.json({ item: publicPost(result.rows[0]) });
   } catch (error) {
@@ -597,6 +871,7 @@ app.put('/api/admin/posts/:id', requireDatabase, requireAdmin, requireAdminCsrf,
     next(error);
   }
 });
+
 app.delete('/api/admin/posts/:id', requireDatabase, requireAdmin, requireAdminCsrf, async (req, res, next) => {
   try {
     const result = await pool.query('DELETE FROM store_posts WHERE id=$1 RETURNING id', [req.params.id]);

@@ -597,8 +597,23 @@
     const shotBtn = event.target.closest('.screenshot-thumb-btn');
     if (shotBtn) {
       event.preventDefault();
-      const imgUrl = shotBtn.dataset.fullImg;
-      if (imgUrl) openScreenshotLightbox(imgUrl);
+      const scrollParent = shotBtn.closest('.detail-screenshots-scroll');
+      const allShots = scrollParent
+        ? Array.from(scrollParent.querySelectorAll('.screenshot-thumb-btn')).map(b => b.dataset.fullImg)
+        : [shotBtn.dataset.fullImg];
+      const idx = Number(shotBtn.dataset.shotIdx) || 0;
+      openScreenshotLightbox(allShots, idx);
+      return;
+    }
+
+    // 11b. Category badge click in details -> filter by category
+    const catBadge = event.target.closest('[data-filter-cat]');
+    if (catBadge) {
+      event.preventDefault();
+      const catName = catBadge.dataset.filterCat;
+      const dlg = $('#product-dialog');
+      if (dlg) dlg.close();
+      selectCategory(catName, catName);
       return;
     }
 
@@ -612,19 +627,98 @@
     }
   });
 
-  function openScreenshotLightbox(url) {
-    const box = $('#screenshot-lightbox');
+  const lightboxState = {
+    images: [],
+    index: 0,
+    savedScrollY: 0
+  };
+
+  function updateLightboxImage() {
     const img = $('#lightbox-img');
-    if (!box || !img) return;
-    img.src = url;
+    const counter = $('#lightbox-counter');
+    if (!img || !lightboxState.images.length) return;
+    const currentUrl = lightboxState.images[lightboxState.index];
+    img.src = currentUrl;
+    if (counter) counter.textContent = `${lightboxState.index + 1} / ${lightboxState.images.length}`;
+  }
+
+  function openScreenshotLightbox(images, startIndex = 0) {
+    const box = $('#screenshot-lightbox');
+    if (!box || !images.length) return;
+    lightboxState.images = images;
+    lightboxState.index = Math.max(0, Math.min(startIndex, images.length - 1));
+    lightboxState.savedScrollY = window.scrollY;
+    updateLightboxImage();
     box.hidden = false;
   }
+
   function closeScreenshotLightbox() {
     const box = $('#screenshot-lightbox');
-    if (box) box.hidden = true;
+    if (box) {
+      box.hidden = true;
+      window.scrollTo({ top: lightboxState.savedScrollY, behavior: 'instant' });
+    }
   }
+
+  function lightboxNext() {
+    if (!lightboxState.images.length) return;
+    lightboxState.index = (lightboxState.index + 1) % lightboxState.images.length;
+    updateLightboxImage();
+  }
+
+  function lightboxPrev() {
+    if (!lightboxState.images.length) return;
+    lightboxState.index = (lightboxState.index - 1 + lightboxState.images.length) % lightboxState.images.length;
+    updateLightboxImage();
+  }
+
   $('#lightbox-close')?.addEventListener('click', closeScreenshotLightbox);
   $('#lightbox-backdrop')?.addEventListener('click', closeScreenshotLightbox);
+  $('#lightbox-next')?.addEventListener('click', lightboxNext);
+  $('#lightbox-prev')?.addEventListener('click', lightboxPrev);
+
+  document.addEventListener('keydown', (e) => {
+    const box = $('#screenshot-lightbox');
+    if (!box || box.hidden) return;
+    if (e.key === 'Escape') closeScreenshotLightbox();
+    else if (e.key === 'ArrowRight') lightboxPrev();
+    else if (e.key === 'ArrowLeft') lightboxNext();
+  });
+
+  function renderBlocksSafe(blocks) {
+    if (!Array.isArray(blocks) || !blocks.length) return '';
+    return blocks.map(b => {
+      const align = ['right', 'center', 'left'].includes(b.align) ? b.align : 'right';
+      const color = (b.color && /^#[0-9a-f]{3,8}$/i.test(b.color)) ? `color:${b.color};` : '';
+      const style = `text-align:${align};${color}`;
+      if (b.type === 'h2') {
+        return `<h2 class="detail-block-h2" style="${style}">${escapeHtml(b.text || '')}</h2>`;
+      }
+      if (b.type === 'h3') {
+        return `<h3 class="detail-block-h3" style="${style}">${escapeHtml(b.text || '')}</h3>`;
+      }
+      if (b.type === 'p') {
+        return `<p class="detail-block-p" style="${style}">${escapeHtml(b.text || '').replace(/\n/g, '<br>')}</p>`;
+      }
+      if (b.type === 'image' && b.url) {
+        return `
+          <figure class="detail-block-figure" style="text-align:${align};margin:16px 0">
+            <img src="${escapeHtml(b.url)}" alt="${escapeHtml(b.caption || '')}" loading="lazy" style="max-width:100%;border-radius:12px">
+            ${b.caption ? `<figcaption style="font-size:11px;color:#66716a;margin-top:6px;${color}">${escapeHtml(b.caption)}</figcaption>` : ''}
+          </figure>
+        `;
+      }
+      if (b.type === 'video' && b.url) {
+        const u = b.url;
+        if (u.includes('youtube.com') || u.includes('youtu.be')) {
+          const id = u.includes('youtu.be') ? u.split('/').pop().split('?')[0] : (new URL(u, 'https://youtube.com').searchParams.get('v') || '');
+          return `<div class="detail-block-video" style="text-align:${align};margin:16px 0"><iframe width="100%" height="320" src="https://www.youtube.com/embed/${escapeHtml(id)}" frameborder="0" allowfullscreen style="border-radius:12px"></iframe></div>`;
+        }
+        return `<div class="detail-block-video" style="text-align:${align};margin:16px 0"><video controls src="${escapeHtml(u)}" style="max-width:100%;border-radius:12px"></video></div>`;
+      }
+      return '';
+    }).join('');
+  }
 
   /* Dedicated Product Details View */
   async function showProductDetails(slug) {
@@ -664,11 +758,11 @@
       if (Array.isArray(item.screenshots) && item.screenshots.length) {
         galleryHtml = `
           <div class="detail-gallery-box">
-            <h3>لقطات الشاشة والمعاينة</h3>
+            <h3>لقطات الشاشة والمعاينة (${item.screenshots.length})</h3>
             <div class="detail-screenshots-scroll">
-              ${item.screenshots.map(s => `
-                <button type="button" class="screenshot-thumb-btn" data-full-img="${escapeHtml(s)}" title="اضغط للتكبير">
-                  <img src="${escapeHtml(s)}" alt="لقطة شاشة" loading="lazy" onerror="this.parentElement.remove()">
+              ${item.screenshots.map((s, idx) => `
+                <button type="button" class="screenshot-thumb-btn" data-full-img="${escapeHtml(s)}" data-shot-idx="${idx}" title="اضغط للتكبير في وضع المعاينة (Lightbox)">
+                  <img src="${escapeHtml(s)}" alt="لقطة شاشة ${idx + 1}" loading="lazy" onerror="this.parentElement.remove()">
                 </button>
               `).join('')}
             </div>
@@ -689,6 +783,20 @@
         ? new Date(item.updatedAt).toLocaleDateString('ar-IQ', { year: 'numeric', month: 'long', day: 'numeric' })
         : 'حديثاً';
 
+      // Categories badges
+      const categoriesList = Array.isArray(item.categories) && item.categories.length
+        ? item.categories
+        : (item.category ? [item.category] : []);
+      const categoriesBadges = categoriesList.map(c => `
+        <button type="button" class="detail-category-badge" data-filter-cat="${escapeHtml(c)}" title="تصفية حسب قسم ${escapeHtml(c)}">${escapeHtml(c)}</button>
+      `).join('');
+
+      // Blocks description
+      const blocksRendered = renderBlocksSafe(item.contentBlocks);
+      const descriptionContent = blocksRendered || `
+        <p class="detail-description">${escapeHtml(item.description || item.shortDescription || 'لا يتوفر وصف إضافي لهذا المنتج حالياً.')}</p>
+      `;
+
       dialog.innerHTML = `
         <button class="dialog-close" type="button" aria-label="إغلاق">×</button>
         <button class="dialog-share" id="share-product-btn" type="button" title="مشاركة الرابط" aria-label="مشاركة رابط المنتج">➦</button>
@@ -697,7 +805,7 @@
             ${icon}
             <div class="detail-header-info">
               <div class="detail-badges-row">
-                <span class="detail-category-badge">${escapeHtml(item.category || 'منتج رقمي')}</span>
+                ${categoriesBadges}
                 <span class="detail-type-tag">${typeLabel}</span>
                 ${item.featured ? '<span class="detail-type-tag" style="background:#eaf5ee;color:#16834a;border-color:#bce1c7">مميّز</span>' : ''}
               </div>
@@ -738,7 +846,9 @@
 
           <div class="detail-section-card">
             <h3>عن هذا ${isGame ? 'اللعبة' : 'التطبيق'}</h3>
-            <p class="detail-description">${escapeHtml(item.description || item.shortDescription || 'لا يتوفر وصف إضافي لهذا المنتج حالياً.')}</p>
+            <div class="detail-rich-content">
+              ${descriptionContent}
+            </div>
             ${releaseNotesHtml}
           </div>
 
@@ -750,7 +860,7 @@
               <div class="spec-item"><span>حجم التنزيل</span><span>${escapeHtml(item.fileSize || 'غير محدد')}</span></div>
               <div class="spec-item"><span>نظام التشغيل</span><span>${escapeHtml(item.platform || 'Android')}</span></div>
               <div class="spec-item"><span>تاريخ آخر تحديث</span><span>${escapeHtml(formattedDate)}</span></div>
-              <div class="spec-item"><span>القسم</span><span>${escapeHtml(item.category || 'عام')}</span></div>
+              <div class="spec-item"><span>الأقسام</span><span>${escapeHtml(categoriesList.join('، ') || 'عام')}</span></div>
             </div>
           </div>
 
